@@ -31,7 +31,7 @@ public class AionLevelsProcessor {
   @Option(name = "-lvl", usage = "Level-Id to generate geodata for e.g. 110010000. default: all levels. ", metaVar = "LVLID")
   protected String levelId = null;
 
-  @Option(name = "-w", usage = "Path to WorldId.xml file. default: client WorldId.xml", metaVar = "PATH")
+  @Option(name = "-w", usage = "Path to server world_maps.xml or client WorldId.xml. default: client WorldId.xml", metaVar = "PATH")
   protected String worldIdPath;
 
   @Option(name = "-t", usage = "Path to the temporary folder.", metaVar = "PATH")
@@ -89,7 +89,6 @@ public class AionLevelsProcessor {
   private BrushLstLoader brushLoader = new BrushLstLoader();
   private ObjectsLstLoader objectsLoader = new ObjectsLstLoader();
   private EntityLoader entityLoader = new EntityLoader();
-  private CgfLoader cgfLoader = new CgfLoader();
   private File levelsTmpFolder = null;
   private File meshesTmpFolder = null;
   private File levelsCommonDir = null;
@@ -405,14 +404,12 @@ public class AionLevelsProcessor {
 
   private void initResources() throws IOException {
     levelsTmpFolder = new File(tmpPath, "Levels");
-    if (!levelsTmpFolder.exists()) {
-      levelsTmpFolder.mkdirs();
-    }
+    levelsTmpFolder.mkdirs();
 
     meshesTmpFolder = new File(tmpPath, "Meshes");
-    if (!meshesTmpFolder.exists()) {
-      meshesTmpFolder.mkdirs();
-    }
+    meshesTmpFolder.mkdirs();
+
+    new File(outPath).mkdirs();
 
     worldIdFile = null;
     if (worldIdPath != null) {
@@ -423,18 +420,9 @@ public class AionLevelsProcessor {
       }
     }
     if (worldIdFile == null) {
-      try {
-        worldIdFile = getClientWorldIdFile(clientPath);
-        worldIdPath = worldIdFile.getPath();
-      } catch (final Exception e) {
-        System.out.println("Cannot find client WorldId.xml. Trying to use local one");
-      }
-    }
-    if (worldIdFile == null) {
-      worldIdFile = new File("./WorldId.xml");
+      worldIdFile = getClientWorldIdFile();
       if (!worldIdFile.exists() || !worldIdFile.isFile())
-        throw new FileNotFoundException("Path to WorldId.xml file [" + worldIdPath + "] doesn't exist or is not a file path");
-      worldIdPath = "./WorldId.xml";
+        throw new FileNotFoundException("Cannot find client WorldId.xml.");
     }
 
     // Path to the levels' meshes
@@ -499,10 +487,9 @@ public class AionLevelsProcessor {
     return convertedHouseAddressXmlFile;
   }
 
-  private File getClientWorldIdFile(final String aionClientPath) throws IOException {
+  private File getClientWorldIdFile() throws IOException {
 
-    final File worldIdPakFile = new File(aionClientPath, "Data/World/World.pak");
-
+    final File worldIdPakFile = new File(clientPath, "Data/World/World.pak");
     final File worldIdXmlFile = new File(tmpPath, "WorldId_orig.xml");
     final FileOutputStream origWorldIdXmlStream = new FileOutputStream(worldIdXmlFile);
 
