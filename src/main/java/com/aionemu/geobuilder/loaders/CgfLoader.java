@@ -682,7 +682,7 @@ public class CgfLoader {
             //isMaterialIntention(materialData.get(materialIdx.get(matIdx)).materialId)
             CgfMaterialData matData = materialData.get(materialIdx.get(face.getKey()));
             if (isMaterialIntention(matData.materialId)) {
-              if (!isMaterialCollideable(matData) || meshData.materialId >= 14 && meshData.materialId <= 16) { // exception for abyss core & abyss bases
+              if (!isMaterialCollideable(matData) || matData.materialId >= 14 && matData.materialId <= 16) { // exception for abyss core & abyss bases
                 meshData.collisionIntention = 0;
               }
               meshData.collisionIntention |= CollisionIntention.MATERIAL.getId();
