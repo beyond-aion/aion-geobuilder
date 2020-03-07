@@ -9,313 +9,25 @@ import com.aionemu.geobuilder.utils.Quaternion;
 import com.aionemu.geobuilder.utils.Vector3;
 import com.aionemu.geobuilder.math.Matrix4f;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 public class CgfLoader {
 
-  private static Map<String, Integer> materialNamesAndIds = new HashMap<>();
-  private static List<Integer> materialIntentionIds = new ArrayList<>();
-  private FileInputStream meshFileStream = null;
+  private static final Map<String, Integer> materialNamesAndIds = new HashMap<>();
+  private static final Set<Integer> materialIntentionIds = new HashSet<>();
   private List<CgfChunkHeader> chunkHeaders = new ArrayList<>();
   private Map<Integer, CgfMaterialData> materialData = new HashMap<>();
   private List<CgfNodeData> nodes = new ArrayList<>();
   private List<Integer> materialIdx = new ArrayList<>();
-  private String path = "";
   private String[] boneNames;
   private List<float[]> boneInitialPos = new ArrayList<>();
   private List<CgfBoneAnimData> bones = new ArrayList<>();
   private HashMap<Integer, CgfBoneMeshData> boneMeshes = new HashMap<>();
 
-  public void load(String path) throws IOException {
-    this.load(path, true);
-  }
-
-  public void load(String path, boolean loadBones) throws IOException {
-    close();
-    this.path = path;
-    meshFileStream = new FileInputStream(path);
-    final DataInputStream stream = new DataInputStream(meshFileStream);
-    final byte[] signature = new byte[8];
-    stream.readFully(signature);
-    if (signature[0] != 0x4E || signature[1] != 0x43 || signature[2] != 0x41 || signature[3] != 0x69 || signature[4] != 0x6F || signature[5] != 0x6E
-        || signature[6] != 0x00 || signature[7] != 0x00) { // NCAion
-      throw new IOException("Wrong signature");
-    }
-    final int fileType = stream.readInt();
-    if (fileType == 0xFFFF0001)
-      throw new IOException("TODO: Animation Data");
-    if (fileType != 0xFFFF0000) // geom data
-      throw new IOException("Wrong filetype");
-    stream.skip(4); // chunk version
-
-    final int tableOffset = stream.readInt();
-    meshFileStream.getChannel().position(tableOffset); // move to chunks table
-    final int chunksCount = stream.readInt();
-    List<CgfNodeData> flatNodes = new ArrayList<>();
-    for (int i = 0; i < chunksCount; i++) {
-      CgfChunkHeader header = CgfChunkHeader.read(stream);
-      chunkHeaders.add(header);
-    }
-
-    for (int i = 0; i < chunkHeaders.size(); i++) {
-      if (chunkHeaders.get(i).chunkType == 0xCCCC000C) { // Material
-        materialData.put(i, loadMaterial(chunkHeaders.get(i)));
-        if (materialData.get(i).matType != 2) {
-          materialIdx.add(i);
-        }
-      }
-    }
-
-    for (int i = 0; i < chunkHeaders.size(); i++) {
-      if (chunkHeaders.get(i).chunkType == 0xCCCC000B) { // Node
-        flatNodes.add(loadNodeData(chunkHeaders.get(i)));
-      }
-    }
-
-    for (CgfNodeData node : flatNodes) {
-      if (node.parentId != -1) {
-        for (CgfNodeData nodeData : flatNodes) {
-          if (nodeData.chunkId == node.parentId) {
-            if (nodeData.children == null) {
-              nodeData.children = new ArrayList<>();
-            }
-            nodeData.children.add(node);
-            break;
-          }
-        }
-      } else { // node is top level
-        nodes.add(node);
-      }
-    }
-
-    if (loadBones) {
-      for (int i = 0; i < chunkHeaders.size(); i++) {
-        if (chunkHeaders.get(i).chunkType == 0xCCCC0005) { // BoneNameList
-          loadBoneNameList(chunkHeaders.get(i));
-        } else if (chunkHeaders.get(i).chunkType == 0xCCCC0012) { // BoneInitialPos
-          loadBoneInitialPos(chunkHeaders.get(i));
-        } else if (chunkHeaders.get(i).chunkType == 0xCCCC000F) { // BoneMesh
-          CgfBoneMeshData cgfBoneMeshData = loadBoneMeshData(chunkHeaders.get(i));
-          boneMeshes.put(chunkHeaders.get(i).chunkId, cgfBoneMeshData);
-        }
-      }
-
-      for (int i = 0; i < chunkHeaders.size(); i++) {
-        if (chunkHeaders.get(i).chunkType == 0xCCCC0003) { // BoneAnimChunk
-          CgfBoneAnimData data = loadBoneAnimData(chunkHeaders.get(i));
-          if (data != null) {
-            bones.add(data);
-          }
-        }
-      }
-    }
-  }
-
-  private CgfBoneAnimData loadBoneAnimData(CgfChunkHeader header) throws IOException {
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(header.chunkOffset);
-
-    stream.readInt(); // chunk type
-    stream.readInt(); // chunk version
-    stream.readInt(); // chunk offset
-    stream.readInt(); // this chunk id
-
-    int numChildren = stream.readInt();
-    CgfBoneAnimData result = new CgfBoneAnimData();
-    List<CgfBoneEntity> boneEntities = new ArrayList<>();
-    for (int i = 0; i < numChildren; i++) {
-      int boneId = stream.readInt();
-      int parentBoneId = stream.readInt();
-      int childrenSize = stream.readInt();
-      int nameCrc32 = stream.readInt(); // unsigned value
-      byte[] nameBytes = new byte[32];
-      stream.readFully(nameBytes);
-      int meshId = stream.readInt();
-      int flags = stream.readInt();
-      stream.skip(5 * 3 * 4); // skip vector3s: min, max, spring_angle, spring_tension and damping
-      stream.skip(3 * 3 * 4); // skip frame matrix3x3
-
-      CgfBoneEntity entity = new CgfBoneEntity();
-      entity.chunkdId = boneId;
-      entity.parentChunkId = parentBoneId;
-      entity.matrix = boneInitialPos.get(i);
-      if (meshId >= 0) {
-        entity.mesh = boneMeshes.get(meshId);
-        if (entity.mesh != null) {
-          if (boneNames != null && boneNames.length > i) {
-            entity.mesh.name = boneNames[i];
-          }
-        }
-      }
-      if (entity.mesh != null) {
-        if (!entity.mesh.name.toLowerCase().contains("box") && !entity.mesh.name.toLowerCase().startsWith("fx")) {
-          boneEntities.add(entity);
-        }
-      }
-    }
-    if (boneEntities.size() > 0) {
-      result.bones = boneEntities;
-      return result;
-    }
-    return null;
-  }
-
-  private CgfBoneMeshData loadBoneMeshData(CgfChunkHeader header) throws IOException {
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(header.chunkOffset);
-    stream.skip(4 * 5); // skip header
-    int verticesCount = stream.readInt();
-    stream.skip(4); // skip uvs count
-    int indicesCount = stream.readInt();
-    stream.skip(4); // skip vertAnim reference
-
-    CgfBoneMeshData result = new CgfBoneMeshData();
-    result.vertices = new ArrayList<>();
-    result.indices = new ArrayList<>();
-    for (int i = 0; i < verticesCount; i++) {
-      Vector3 vec = new Vector3();
-      vec.x = stream.readFloat() / 100f;
-      vec.y = stream.readFloat() / 100f;
-      vec.z = stream.readFloat() / 100f;
-      result.vertices.add(vec);
-      stream.skip(4 * 3); // skip normal
-    }
-
-    for (int i = 0; i < indicesCount; i++) {
-      MeshFace meshFace = new MeshFace();
-      meshFace.v0 = stream.readInt();
-      meshFace.v1 = stream.readInt();
-      meshFace.v2 = stream.readInt();
-
-      int matIdx = stream.readInt();
-      if (isMaterialCollideable(materialData.get(materialIdx.get(matIdx))) || isMaterialIntention(materialData.get(materialIdx.get(matIdx)).materialId)) {
-        result.indices.add(meshFace);
-      }
-      stream.skip(4); //skip smoothing group
-    }
-    return result;
-  }
-
-  private void loadBoneInitialPos(CgfChunkHeader header) throws IOException {
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(header.chunkOffset);
-    int meshRef = stream.readInt();
-    int numBones = stream.readInt();
-    for (int i = 0; i < numBones; i++) {
-      float[] matrix = new float[3 * 4];
-      matrix[0] = stream.readFloat();
-      matrix[1] = stream.readFloat();
-      matrix[2] = stream.readFloat();
-      matrix[3] = stream.readFloat();
-      matrix[4] = stream.readFloat();
-      matrix[5] = stream.readFloat();
-      matrix[6] = stream.readFloat();
-      matrix[7] = stream.readFloat();
-      matrix[8] = stream.readFloat();
-      matrix[9] = stream.readFloat();
-      matrix[10] = stream.readFloat();
-      matrix[11] = stream.readFloat();
-      boneInitialPos.add(i, matrix);
-    }
-  }
-
-  private void loadBoneNameList(CgfChunkHeader header) throws IOException {
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(header.chunkOffset);
-
-    int nameCount = stream.readInt();
-    String[] names = new String[nameCount];
-    int i = 0;
-    List<Byte> array = new ArrayList<Byte>();
-    while (true) {
-      if (i >= nameCount) {
-        break;
-      }
-      byte read = stream.readByte();
-      if (read != 0) {
-        array.add(read);
-      } else {
-        byte[] nameBytes = new byte[array.size()];
-        for (int j = 0; j < array.size(); j++) {
-          nameBytes[j] = array.get(j);
-        }
-        names[i] = new String(nameBytes, Charset.forName("UTF-8"));
-        array.clear();
-        i++;
-      }
-    }
-    this.boneNames = names;
-  }
-
-  private CgfMaterialData loadMaterial(CgfChunkHeader header) throws IOException {
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(header.chunkOffset);
-
-    CgfMaterialData result = new CgfMaterialData();
-    stream.skip(4 * 4); // skip header
-    byte[] nameBytes = new byte[128];
-    stream.readFully(nameBytes);
-    String name = new String(nameBytes, Charset.forName("UTF-8")).trim();
-    result.matType = stream.readInt();
-
-    int multiCount = 0;
-    int tmp = stream.readInt();
-    // if type == 2: next int is multicount, if its 1 next int is a color
-    if (result.matType == 2) {
-      multiCount = tmp;
-    }
-    // if matType == 1, next chunk is texture/shader info
-    // if matType == 2, next chunk is zeros
-    stream.skip(67 * 4 + 128 + 263 * 4 + 128 + 204 * 4);
-    result.matFlags = stream.readInt();
-    String matName = name;
-    if (name.contains("/")) {
-      String[] nameSplitted = name.split("/");
-      matName = nameSplitted[nameSplitted.length - 1];
-      if (matName.contains("\u0005")) {
-        String[] matNameSplitted = matName.split("\u0005");
-        matName = matNameSplitted[0];
-      }
-    }
-    matName = matName.replaceAll("[^0-9a-zA-Z_]", "");
-    int materialId = getMaterialIdFor(matName);
-    result.materialId = materialId;
-    float collision = stream.readFloat();
-    if (collision != 0f && collision != 1f) {
-      throw new IOException("expected 0.0 or 1.0 for collision flag but found: " + collision);
-    }
-    if (collision == 1f) { // TODO: this might be wrong, materialIds 6-9 are not physical ingame yet we mark them?
-      result.isCollision = true;
-    }
-    stream.readFloat();
-    stream.readFloat();
-
-    if (result.matType == 2 && multiCount > 0) {
-      result.multiMaterialIds = new ArrayList<>();
-    }
-    for (int i = 0; i < multiCount; i++) {
-      result.multiMaterialIds.add(stream.readInt());
-    }
-    return result;
-  }
-
-  public static int getMaterialIdFor(String matName) {
-    if (materialNamesAndIds.isEmpty()) {
-      addMaterials();
-    }
-    if (materialNamesAndIds.containsKey(matName)) {
-      return materialNamesAndIds.get(matName);
-    }
-    return -1;
-  }
-
-  public static void addMaterials() {
+  static {
     materialNamesAndIds.put("mat_default", 0);
     materialNamesAndIds.put("mat_nowalk_obstacle0", 1);
     materialNamesAndIds.put("mat_nowalk_obstacle1", 2);
@@ -454,25 +166,346 @@ public class CgfLoader {
     materialNamesAndIds.put("mat_poison_die", 140);
     materialNamesAndIds.put("mat_eresukigal_dmg", 141);
     materialNamesAndIds.put("mat_FFA_Hide", 142);
+
+    materialIntentionIds.add(11);
+    materialIntentionIds.add(12);
+    materialIntentionIds.add(13);
+    materialIntentionIds.add(14);
+    materialIntentionIds.add(15);
+    materialIntentionIds.add(16);
+    materialIntentionIds.add(60);
+    materialIntentionIds.add(61);
+    materialIntentionIds.add(62);
+    materialIntentionIds.add(63);
+    materialIntentionIds.add(91);
+    materialIntentionIds.add(92);
+    materialIntentionIds.add(93);
+    materialIntentionIds.add(97);
+    materialIntentionIds.add(99);
+    materialIntentionIds.add(100);
+    materialIntentionIds.add(101);
+    materialIntentionIds.add(103);
+    materialIntentionIds.add(107);
+    materialIntentionIds.add(108);
+    materialIntentionIds.add(111);
+    materialIntentionIds.add(113);
+    materialIntentionIds.add(114);
+    materialIntentionIds.add(115);
+    materialIntentionIds.add(116);
+    materialIntentionIds.add(117);
+    materialIntentionIds.add(118);
+    // skip skill obstacles
+    //materialIntentionIds.add(121);
+    //materialIntentionIds.add(122);
+    //materialIntentionIds.add(123);
+    //materialIntentionIds.add(124);
+    materialIntentionIds.add(125);
+    materialIntentionIds.add(126);
+    materialIntentionIds.add(127);
+    materialIntentionIds.add(132);
+    materialIntentionIds.add(134);
+
+    //new 7.0
+    materialIntentionIds.add(135);
+    materialIntentionIds.add(136);
+    materialIntentionIds.add(139);
+    materialIntentionIds.add(140);
+    materialIntentionIds.add(141);
+    materialIntentionIds.add(142);
   }
 
-  private CgfNodeData loadNodeData(CgfChunkHeader header) throws IOException {
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(header.chunkOffset);
+  public void load(InputStream inputStream) throws IOException {
+    this.load(inputStream, true);
+  }
+
+  public void load(InputStream inputStream, boolean loadBones) throws IOException {
+    clear();
+    try (DataInputStream stream = new DataInputStream(inputStream)) {
+      final byte[] signature = new byte[8];
+      stream.readFully(signature);
+      if (signature[0] != 0x4E || signature[1] != 0x43 || signature[2] != 0x41 || signature[3] != 0x69 || signature[4] != 0x6F || signature[5] != 0x6E
+          || signature[6] != 0x00 || signature[7] != 0x00) { // NCAion
+        throw new IOException("Wrong signature");
+      }
+      final int fileType = stream.readInt();
+      if (fileType == 0xFFFF0001)
+        throw new IOException("TODO: Animation Data");
+      if (fileType != 0xFFFF0000) // geom data
+        throw new IOException("Wrong filetype");
+      stream.skip(4); // chunk version
+
+      final int tableOffset = stream.readInt();
+      position(stream, tableOffset); // move to chunks table
+      final int chunksCount = stream.readInt();
+      List<CgfNodeData> flatNodes = new ArrayList<>();
+      for (int i = 0; i < chunksCount; i++) {
+        CgfChunkHeader header = CgfChunkHeader.read(stream);
+        chunkHeaders.add(header);
+      }
+
+      for (int i = 0; i < chunkHeaders.size(); i++) {
+        if (chunkHeaders.get(i).chunkType == 0xCCCC000C) { // Material
+          materialData.put(i, loadMaterial(chunkHeaders.get(i), stream));
+          if (materialData.get(i).matType != 2) {
+            materialIdx.add(i);
+          }
+        }
+      }
+
+      for (CgfChunkHeader chunkHeader : chunkHeaders) {
+        if (chunkHeader.chunkType == 0xCCCC000B) { // Node
+          flatNodes.add(loadNodeData(chunkHeader, stream));
+        }
+      }
+
+      for (CgfNodeData node : flatNodes) {
+        if (node.parentId != -1) {
+          for (CgfNodeData nodeData : flatNodes) {
+            if (nodeData.chunkId == node.parentId) {
+              if (nodeData.children == null) {
+                nodeData.children = new ArrayList<>();
+              }
+              nodeData.children.add(node);
+              break;
+            }
+          }
+        } else { // node is top level
+          nodes.add(node);
+        }
+      }
+
+      if (loadBones) {
+        for (CgfChunkHeader chunkHeader : chunkHeaders) {
+          if (chunkHeader.chunkType == 0xCCCC0005) { // BoneNameList
+            loadBoneNameList(chunkHeader, stream);
+          } else if (chunkHeader.chunkType == 0xCCCC0012) { // BoneInitialPos
+            loadBoneInitialPos(chunkHeader, stream);
+          } else if (chunkHeader.chunkType == 0xCCCC000F) { // BoneMesh
+            CgfBoneMeshData cgfBoneMeshData = loadBoneMeshData(chunkHeader, stream);
+            boneMeshes.put(chunkHeader.chunkId, cgfBoneMeshData);
+          }
+        }
+
+        for (CgfChunkHeader chunkHeader : chunkHeaders) {
+          if (chunkHeader.chunkType == 0xCCCC0003) { // BoneAnimChunk
+            CgfBoneAnimData data = loadBoneAnimData(chunkHeader, stream);
+            if (data != null) {
+              bones.add(data);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private void position(InputStream byteStream, long position) throws IOException {
+    byteStream.reset();
+    byteStream.skip(position);
+  }
+
+  private CgfBoneAnimData loadBoneAnimData(CgfChunkHeader header, DataInputStream stream) throws IOException {
+    position(stream, header.chunkOffset);
+
+    stream.readInt(); // chunk type
+    stream.readInt(); // chunk version
+    stream.readInt(); // chunk offset
+    stream.readInt(); // this chunk id
+
+    int numChildren = stream.readInt();
+    CgfBoneAnimData result = new CgfBoneAnimData();
+    List<CgfBoneEntity> boneEntities = new ArrayList<>();
+    for (int i = 0; i < numChildren; i++) {
+      int boneId = stream.readInt();
+      int parentBoneId = stream.readInt();
+      int childrenSize = stream.readInt();
+      int nameCrc32 = stream.readInt(); // unsigned value
+      byte[] nameBytes = new byte[32];
+      stream.readFully(nameBytes);
+      int meshId = stream.readInt();
+      int flags = stream.readInt();
+      stream.skip(5 * 3 * 4); // skip vector3s: min, max, spring_angle, spring_tension and damping
+      stream.skip(3 * 3 * 4); // skip frame matrix3x3
+
+      CgfBoneEntity entity = new CgfBoneEntity();
+      entity.chunkdId = boneId;
+      entity.parentChunkId = parentBoneId;
+      entity.matrix = boneInitialPos.get(i);
+      if (meshId >= 0) {
+        entity.mesh = boneMeshes.get(meshId);
+        if (entity.mesh != null) {
+          if (boneNames != null && boneNames.length > i) {
+            entity.mesh.name = boneNames[i];
+          }
+        }
+      }
+      if (entity.mesh != null) {
+        if (!entity.mesh.name.toLowerCase().contains("box") && !entity.mesh.name.toLowerCase().startsWith("fx")) {
+          boneEntities.add(entity);
+        }
+      }
+    }
+    if (boneEntities.size() > 0) {
+      result.bones = boneEntities;
+      return result;
+    }
+    return null;
+  }
+
+  private CgfBoneMeshData loadBoneMeshData(CgfChunkHeader header, DataInputStream stream) throws IOException {
+    position(stream, header.chunkOffset);
+    stream.skip(4 * 5); // skip header
+    int verticesCount = stream.readInt();
+    stream.skip(4); // skip uvs count
+    int indicesCount = stream.readInt();
+    stream.skip(4); // skip vertAnim reference
+
+    CgfBoneMeshData result = new CgfBoneMeshData();
+    result.vertices = new ArrayList<>();
+    result.indices = new ArrayList<>();
+    for (int i = 0; i < verticesCount; i++) {
+      Vector3 vec = new Vector3();
+      vec.x = stream.readFloat() / 100f;
+      vec.y = stream.readFloat() / 100f;
+      vec.z = stream.readFloat() / 100f;
+      result.vertices.add(vec);
+      stream.skip(4 * 3); // skip normal
+    }
+
+    for (int i = 0; i < indicesCount; i++) {
+      MeshFace meshFace = new MeshFace();
+      meshFace.v0 = stream.readInt();
+      meshFace.v1 = stream.readInt();
+      meshFace.v2 = stream.readInt();
+
+      int matIdx = stream.readInt();
+      if (isMaterialCollideable(materialData.get(materialIdx.get(matIdx))) || isMaterialIntention(materialData.get(materialIdx.get(matIdx)).materialId)) {
+        result.indices.add(meshFace);
+      }
+      stream.skip(4); //skip smoothing group
+    }
+    return result;
+  }
+
+  private void loadBoneInitialPos(CgfChunkHeader header, DataInputStream stream) throws IOException {
+    position(stream, header.chunkOffset);
+    int meshRef = stream.readInt();
+    int numBones = stream.readInt();
+    for (int i = 0; i < numBones; i++) {
+      float[] matrix = new float[3 * 4];
+      matrix[0] = stream.readFloat();
+      matrix[1] = stream.readFloat();
+      matrix[2] = stream.readFloat();
+      matrix[3] = stream.readFloat();
+      matrix[4] = stream.readFloat();
+      matrix[5] = stream.readFloat();
+      matrix[6] = stream.readFloat();
+      matrix[7] = stream.readFloat();
+      matrix[8] = stream.readFloat();
+      matrix[9] = stream.readFloat();
+      matrix[10] = stream.readFloat();
+      matrix[11] = stream.readFloat();
+      boneInitialPos.add(i, matrix);
+    }
+  }
+
+  private void loadBoneNameList(CgfChunkHeader header, DataInputStream stream) throws IOException {
+    position(stream, header.chunkOffset);
+
+    int nameCount = stream.readInt();
+    String[] names = new String[nameCount];
+    int i = 0;
+    List<Byte> array = new ArrayList<Byte>();
+    while (true) {
+      if (i >= nameCount) {
+        break;
+      }
+      byte read = stream.readByte();
+      if (read != 0) {
+        array.add(read);
+      } else {
+        byte[] nameBytes = new byte[array.size()];
+        for (int j = 0; j < array.size(); j++) {
+          nameBytes[j] = array.get(j);
+        }
+        names[i] = new String(nameBytes, StandardCharsets.UTF_8);
+        array.clear();
+        i++;
+      }
+    }
+    this.boneNames = names;
+  }
+
+  private CgfMaterialData loadMaterial(CgfChunkHeader header,DataInputStream stream) throws IOException {
+    position(stream, header.chunkOffset);
+
+    CgfMaterialData result = new CgfMaterialData();
+    stream.skip(4 * 4); // skip header
+    byte[] nameBytes = new byte[128];
+    stream.readFully(nameBytes);
+    String name = new String(nameBytes, StandardCharsets.UTF_8).trim();
+    result.matType = stream.readInt();
+
+    int multiCount = 0;
+    int tmp = stream.readInt();
+    // if type == 2: next int is multicount, if its 1 next int is a color
+    if (result.matType == 2) {
+      multiCount = tmp;
+    }
+    // if matType == 1, next chunk is texture/shader info
+    // if matType == 2, next chunk is zeros
+    stream.skip(67 * 4 + 128 + 263 * 4 + 128 + 204 * 4);
+    result.matFlags = stream.readInt();
+    String matName = name;
+    if (name.contains("/")) {
+      String[] nameSplitted = name.split("/");
+      matName = nameSplitted[nameSplitted.length - 1];
+      if (matName.contains("\u0005")) {
+        String[] matNameSplitted = matName.split("\u0005");
+        matName = matNameSplitted[0];
+      }
+    }
+    matName = matName.replaceAll("[^0-9a-zA-Z_]", "");
+    result.materialId = getMaterialIdFor(matName);
+    float collision = stream.readFloat();
+    if (collision != 0f && collision != 1f) {
+      throw new IOException("expected 0.0 or 1.0 for collision flag but found: " + collision);
+    }
+    if (collision == 1f) { // TODO: this might be wrong, materialIds 6-9 are not physical ingame yet we mark them?
+      result.isCollision = true;
+    }
+    stream.readFloat();
+    stream.readFloat();
+
+    if (result.matType == 2 && multiCount > 0) {
+      result.multiMaterialIds = new ArrayList<>();
+    }
+    for (int i = 0; i < multiCount; i++) {
+      result.multiMaterialIds.add(stream.readInt());
+    }
+    return result;
+  }
+
+  public static int getMaterialIdFor(String matName) {
+    return materialNamesAndIds.getOrDefault(matName, -1);
+  }
+
+  private CgfNodeData loadNodeData(CgfChunkHeader header, DataInputStream stream) throws IOException {
+    position(stream, header.chunkOffset);
 
     CgfNodeData result = new CgfNodeData();
-    stream.skip( 4 * 3); // skip header
+    int headerSize = 4 * 3;
+    stream.skip( headerSize); // skip header
     result.chunkId = stream.readInt();
     byte[] nameBytes = new byte[64];
     stream.readFully(nameBytes);
     result.objectId = stream.readInt();
-    long curPos = meshFileStream.getChannel().position();
-    result.mesh = loadMeshData(result.objectId);
-    result.helper = loadHelperData(result.objectId);
+    long curPos = header.chunkOffset + headerSize + 4 + nameBytes.length + 4;
+    result.mesh = loadMeshData(result.objectId, stream);
+    result.helper = loadHelperData(result.objectId, stream);
     if (result.mesh == null && result.helper == null) {
       throw new IOException("Expected either a mesh or helper but found none");
     }
-    meshFileStream.getChannel().position(curPos);
+    position(stream, curPos);
     result.parentId = stream.readInt();
     stream.readInt(); // number of children
     result.materialId = stream.readInt();
@@ -512,12 +545,11 @@ public class CgfLoader {
     return result;
   }
 
-  private CgfMeshData loadMeshData(int objectId) throws IOException {
+  private CgfMeshData loadMeshData(int objectId, DataInputStream stream) throws IOException {
     if (chunkHeaders.get(objectId).chunkType != 0xCCCC0000) {
       return null;
     }
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(chunkHeaders.get(objectId).chunkOffset);
+    position(stream, chunkHeaders.get(objectId).chunkOffset);
     stream.skip(4 * 5); // skip header
     int verticesCount = stream.readInt();
     stream.skip(4); // skip uvs count
@@ -543,8 +575,9 @@ public class CgfLoader {
       meshFace.v2 = stream.readInt();
 
       int matIdx = stream.readInt();
-      if (isMaterialCollideable(materialData.get(materialIdx.get(matIdx)))) {
-        if (isMaterialIntention(materialData.get(materialIdx.get(matIdx)).materialId)) {
+      CgfMaterialData material = materialData.get(materialIdx.get(matIdx));
+      if (isMaterialCollideable(material)) {
+        if (isMaterialIntention(material.materialId)) {
           if (!result.indices.containsKey(matIdx)) {
             result.indices.put(matIdx, new ArrayList<>());
           }
@@ -555,7 +588,7 @@ public class CgfLoader {
           }
           result.indices.get(0).add(meshFace);
         }
-      } else if (isMaterialIntention(materialData.get(materialIdx.get(matIdx)).materialId)) {
+      } else if (isMaterialIntention(material.materialId)) {
         if (!result.indices.containsKey(matIdx)) {
           result.indices.put(matIdx, new ArrayList<>());
         }
@@ -566,12 +599,11 @@ public class CgfLoader {
     return result;
   }
 
-  private CgfHelperData loadHelperData(int objectId) throws IOException {
+  private CgfHelperData loadHelperData(int objectId, DataInputStream stream) throws IOException {
     if (chunkHeaders.get(objectId).chunkType != 0xCCCC0001) {
       return null;
     }
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(chunkHeaders.get(objectId).chunkOffset);
+    position(stream, chunkHeaders.get(objectId).chunkOffset);
 
     stream.skip(4 * 4); // skip header
 
@@ -587,20 +619,11 @@ public class CgfLoader {
   }
 
 
-  public void close() {
-    if (meshFileStream != null) {
-      try {
-        meshFileStream.close();
-      } catch (IOException e) {
-        System.err.println(e.toString());
-        e.printStackTrace();
-      }
-    }
+  public void clear() {
     chunkHeaders.clear();
     materialData.clear();
     nodes.clear();
     materialIdx.clear();
-    path = "";
     boneNames = null;
     boneInitialPos.clear();
     bones.clear();
@@ -625,9 +648,9 @@ public class CgfLoader {
         continue;
       }
       Matrix4f matrix = new Matrix4f(entity.matrix[0], entity.matrix[1], entity.matrix[2], 0f,
-          entity.matrix[3], entity.matrix[4], entity.matrix[5], 0f,
-          entity.matrix[6], entity.matrix[7], entity.matrix[8], 0f,
-          entity.matrix[9]/100f, entity.matrix[10]/100f, entity.matrix[11]/100f, 1f);
+        entity.matrix[3], entity.matrix[4], entity.matrix[5], 0f,
+        entity.matrix[6], entity.matrix[7], entity.matrix[8], 0f,
+        entity.matrix[9]/100f, entity.matrix[10]/100f, entity.matrix[11]/100f, 1f);
 
       if (entity.mesh != null) {
         MeshData meshData = new MeshData();
@@ -650,9 +673,9 @@ public class CgfLoader {
           }
           float[] t2 = node.transform;
           Matrix4f tMatrix = new Matrix4f(t2[0], t2[1], t2[2], t2[3],
-              t2[4], t2[5], t2[6], t2[7],
-              t2[8], t2[9], t2[10], t2[11],
-              0, 0, 0, 1f);
+            t2[4], t2[5], t2[6], t2[7],
+            t2[8], t2[9], t2[10], t2[11],
+            0, 0, 0, 1f);
           if (node.isGroupHead) {
             locPos = new Vector3(locPos.x / node.scale.x, locPos.y / node.scale.y, locPos.z / node.scale.z);
           }
@@ -663,9 +686,9 @@ public class CgfLoader {
 
       float[] t = node.transform;
       Matrix4f mat = new Matrix4f(t[0], t[1], t[2], t[3],
-          t[4], t[5], t[6], t[7],
-          t[8], t[9], t[10], t[11],
-          locPos.x/100f, locPos.y/100f, locPos.z/100f, 1f);
+        t[4], t[5], t[6], t[7],
+        t[8], t[9], t[10], t[11],
+        locPos.x/100f, locPos.y/100f, locPos.z/100f, 1f);
       if (parentMatrix != null) {
         mat = mat.mult(parentMatrix);
         mat = mat.mult(Matrix4f.IDENTITY);
@@ -724,8 +747,7 @@ public class CgfLoader {
             return mId;
           }
         } else if (matData.matType != 1) {
-          // unhandled mat type
-          System.out.println("Unhandled matType: " + matData.matType + " " + path);
+          throw new RuntimeException("Unhandled matType: " + matData.matType);
         }
         if (isMaterialIntention(matData.materialId)) {
           return matData.materialId;
@@ -736,58 +758,7 @@ public class CgfLoader {
   }
 
   public static boolean isMaterialIntention(int matId) {
-    if (materialIntentionIds.size() == 0) {
-      materialIntentionIds.add(11);
-      materialIntentionIds.add(12);
-      materialIntentionIds.add(13);
-      materialIntentionIds.add(14);
-      materialIntentionIds.add(15);
-      materialIntentionIds.add(16);
-      materialIntentionIds.add(60);
-      materialIntentionIds.add(61);
-      materialIntentionIds.add(62);
-      materialIntentionIds.add(63);
-      materialIntentionIds.add(91);
-      materialIntentionIds.add(92);
-      materialIntentionIds.add(93);
-      materialIntentionIds.add(97);
-      materialIntentionIds.add(99);
-      materialIntentionIds.add(100);
-      materialIntentionIds.add(101);
-      materialIntentionIds.add(103);
-      materialIntentionIds.add(107);
-      materialIntentionIds.add(108);
-      materialIntentionIds.add(111);
-      materialIntentionIds.add(113);
-      materialIntentionIds.add(114);
-      materialIntentionIds.add(115);
-      materialIntentionIds.add(116);
-      materialIntentionIds.add(117);
-      materialIntentionIds.add(118);
-      // skip skill obstacles
-      //materialIntentionIds.add(121);
-      //materialIntentionIds.add(122);
-      //materialIntentionIds.add(123);
-      //materialIntentionIds.add(124);
-      materialIntentionIds.add(125);
-      materialIntentionIds.add(126);
-      materialIntentionIds.add(127);
-      materialIntentionIds.add(132);
-      materialIntentionIds.add(134);
-
-      //new 7.0
-      materialIntentionIds.add(135);
-      materialIntentionIds.add(136);
-      materialIntentionIds.add(139);
-      materialIntentionIds.add(140);
-      materialIntentionIds.add(141);
-      materialIntentionIds.add(142);
-    }
-    if (materialIntentionIds.contains(matId)) {
-      return true;
-    } else {
-      return false;
-    }
+    return materialIntentionIds.contains(matId);
   }
 
   public boolean isCollideable(CgfNodeData node ) {
@@ -822,8 +793,7 @@ public class CgfLoader {
             return true;
           }
         } else if (matData.matType != 1) {
-          // unhandled mat type
-          System.out.println("Unhandled matType: " + matData.matType + " " + path);
+          throw new RuntimeException("Unhandled matType: " + matData.matType);
         }
         if (matData.isCollision) {
           return true;
@@ -839,8 +809,8 @@ public class CgfLoader {
     for (int i = 0; i < source.size(); i++) {
       Vector3 vec = source.get(i);
       result.add(new Vector3((float) ((double) vec.x * (double) m.m11 + (double) vec.y * (double) m.m21 + (double) vec.z * (double) m.m31 + (double) m.m41),
-                  (float) ((double) vec.x * (double) m.m12 + (double) vec.y * (double) m.m22 + (double) vec.z * (double) m.m32 + (double) m.m42),
-                  (float) ((double) vec.x * (double) m.m13 + (double) vec.y * (double) m.m23 + (double) vec.z * (double) m.m33 + (double) m.m43)));
+        (float) ((double) vec.x * (double) m.m12 + (double) vec.y * (double) m.m22 + (double) vec.z * (double) m.m32 + (double) m.m42),
+        (float) ((double) vec.x * (double) m.m13 + (double) vec.y * (double) m.m23 + (double) vec.z * (double) m.m33 + (double) m.m43)));
     }
     return result;
   }
@@ -848,21 +818,21 @@ public class CgfLoader {
   // creates a new cgf at the specified time in ticks.
   // uses the controllers to modify the original transforms.
   // this loads exact keyframe values, curves are not interpolated.
-  public CgfLoader cloneAtTime(int time) {
+  public CgfLoader cloneAtTime(int time, InputStream inputStream) throws IOException {
     // TODO - check loop type.
     // TODO - check time is not greater than global range - need to load timing chunk.
     // TODO - validate keyframe start times are ascending and within global range.
     // TODO - validate controller type. TBC3 for pos, scale, TBCQ for rot, others unexpected...
     // TODO - validate cga vs cgf... some doors have .cgf extension...
     CgfLoader clone = new CgfLoader();
-    try {
-      clone.load(this.path);
+    clone.load(inputStream);
+    try (DataInputStream stream = new DataInputStream(inputStream)) {
       for (CgfNodeData node : clone.nodes) {
         if (!isCollideable(node)) {
           continue;
         }
         if (node.positionControllerId != -1) {
-          List<CgfControllerData> cd = clone.getControllerData(node.positionControllerId, 9); // TBC3
+          List<CgfControllerData> cd = clone.getControllerData(node.positionControllerId, 9, stream); // TBC3
           for (int i = cd.size() - 1; i >=0; i--) {
             if (time >= cd.get(i).time) {
               CgfControllerData d = cd.get(i);
@@ -874,7 +844,7 @@ public class CgfLoader {
         }
 
         if (node.rotationControllerId != -1) {
-          List<CgfControllerData> cd = clone.getControllerData(node.rotationControllerId, 10); // TBCQ
+          List<CgfControllerData> cd = clone.getControllerData(node.rotationControllerId, 10, stream); // TBCQ
           // BUG: doors in theo lab have nodes with broken rotations.
           // see librarydoor_04d controller=12 values: {0, 45 deg, 45 deg, 180 deg}
           // they appear in a 1-key set, so ignoring those for now.
@@ -913,7 +883,7 @@ public class CgfLoader {
         }
 
         if (node.scaleControllerId != -1) {
-          List<CgfControllerData> cd = clone.getControllerData(node.scaleControllerId, 9); // TBC3
+          List<CgfControllerData> cd = clone.getControllerData(node.scaleControllerId, 9, stream); // TBC3
           for (CgfControllerData d : cd) {
             if (d.params[0] != 1 || d.params[1] != 1 || d.params[2] != 1) {
               node.scale.x *= d.params[0];
@@ -923,9 +893,6 @@ public class CgfLoader {
           }
         }
       }
-    } catch (Exception e) {
-      System.err.println(e.toString());
-      e.printStackTrace();
     }
     return clone;
   }
@@ -950,29 +917,28 @@ public class CgfLoader {
    * BSPLINE1C = 14, //1-byte fixed values, closed
    * CONST = 15
    */
-  private List<CgfControllerData> getControllerData(int idx, int type) throws Exception {
+  private List<CgfControllerData> getControllerData(int idx, int type, DataInputStream stream) throws IOException {
     if (idx < 0 || idx > chunkHeaders.size()) {
       throw new IndexOutOfBoundsException();
     }
     if (chunkHeaders.get(idx).chunkType != 0xCCCC000D) { // ChunkType Controller
       return null;
     }
-    DataInputStream stream = new DataInputStream(meshFileStream);
-    meshFileStream.getChannel().position(chunkHeaders.get(idx).chunkOffset);
+    position(stream, chunkHeaders.get(idx).chunkOffset);
     stream.skip(4 * 4); // skip header
     int controllerType = stream.readInt();
     if (controllerType != type && (controllerType != 6 && type == 9)) { // 9 = TCB3
-      throw new Exception("Unexpected controller type. Found: " + controllerType + " expected: " + type);
+      throw new IOException("Unexpected controller type. Found: " + controllerType + " expected: " + type);
     }
     int numKeys = stream.readInt();
     stream.skip(4); // flags
     int controllerId = stream.readInt();
 
     if (numKeys < 1) {
-      throw new Exception("Unexpected key amount.");
+      throw new IOException("Unexpected key amount.");
     }
     if (controllerId != idx) {
-      throw new Exception("Unexpected controller id. Found: " + controllerId + " expected: " + idx);
+      throw new IOException("Unexpected controller id. Found: " + controllerId + " expected: " + idx);
     }
 
     List<CgfControllerData> result = new ArrayList<>();

@@ -3,6 +3,8 @@ package com.aionemu.geobuilder.entries;
 import com.aionemu.geobuilder.utils.Vector3;
 import com.aionemu.geobuilder.math.Matrix4f;
 
+import java.util.stream.Stream;
+
 public class EntityEntry {
 
   public EntityClass entityClass;
@@ -11,6 +13,10 @@ public class EntityEntry {
   public Vector3 angle, pos, scale;
   public String mesh;
   public EntryType type = EntryType.NONE;
+
+  public Stream<String> getAllMeshNames() {
+    return mesh == null ? Stream.empty() : Stream.of(mesh);
+  }
 
   public Matrix4f getMatrix() {
     float pitch = angle.x * ((float) Math.PI / 180f);

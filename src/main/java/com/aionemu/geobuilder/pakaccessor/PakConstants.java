@@ -1,19 +1,22 @@
 package com.aionemu.geobuilder.pakaccessor;
 
+import java.util.function.Function;
+
 public class PakConstants {
 
-  public static int PAK_SIGNATURE1 = 0xB4AF;
-  public static int PAK_SIGNATURE2_FILE = 0xFBFC;
-  public static int PAK_SIGNATURE2_DIR = 0xFDFE;
-  public static int PAK_SIGNATURE2_END = 0xF9FA;
+  public static final short PAK_SIGNATURE1 = (short) 0xB4AF;
+  public static final short PAK_SIGNATURE2_FILE = (short) 0xFBFC;
+  public static final short PAK_SIGNATURE2_DIR = (short) 0xFDFE;
+  public static final short PAK_SIGNATURE2_END = (short) 0xF9FA;
 
-  public static int ZIP_SIGNATURE1 = 0x4B50;
-  public static int ZIP_SIGNATURE2_FILE = 0x0403;
-  public static int ZIP_SIGNATURE2_DIR = 0x0201;
-  public static int ZIP_SIGNATURE2_END = 0x0605;
+  public static final short ZIP_SIGNATURE1 = (short) 0x4B50;
+  public static final short ZIP_SIGNATURE2_FILE = (short) 0x0403;
+  public static final short ZIP_SIGNATURE2_DIR = (short) 0x0201;
+  public static final short ZIP_SIGNATURE2_END = (short) 0x0605;
 
   // open beta
-  public final static byte[] table1 = { (byte) 0x2f, (byte) 0x5d, (byte) 0x51, (byte) 0xf7, (byte) 0x01, (byte) 0xe9, (byte) 0xb4, (byte) 0x93,
+  public static final Function<Integer, Integer> table1Offset = bodySize -> (bodySize & 0x1F) * 32;
+  public static final byte[] table1 = { (byte) 0x2f, (byte) 0x5d, (byte) 0x51, (byte) 0xf7, (byte) 0x01, (byte) 0xe9, (byte) 0xb4, (byte) 0x93,
       (byte) 0x4e, (byte) 0x51, (byte) 0x81, (byte) 0x3e, (byte) 0xaf, (byte) 0x3f, (byte) 0xdf, (byte) 0x99, (byte) 0x80, (byte) 0x5e, (byte) 0x13,
       (byte) 0x83, (byte) 0x9b, (byte) 0x46, (byte) 0x57, (byte) 0xb5, (byte) 0x1b, (byte) 0x5c, (byte) 0xec, (byte) 0xb1, (byte) 0x29, (byte) 0x7c,
       (byte) 0xa9, (byte) 0x31, (byte) 0x68, (byte) 0xe5, (byte) 0xda, (byte) 0xa7, (byte) 0xf6, (byte) 0x4f, (byte) 0xae, (byte) 0x16, (byte) 0x9a,
@@ -109,6 +112,7 @@ public class PakConstants {
       (byte) 0x17, (byte) 0xca, (byte) 0x78, (byte) 0xa0 };
 
   // closed beta
+  public static final Function<Integer, Integer> table2Offset = bodySize -> (bodySize & 0x3FF);
   public final static byte[] table2 = { (byte) 0x86, (byte) 0xFA, (byte) 0x1A, (byte) 0x1C, (byte) 0x07, (byte) 0xBD, (byte) 0xD8, (byte) 0x64,
       (byte) 0xCE, (byte) 0xEE, (byte) 0x59, (byte) 0x88, (byte) 0xCD, (byte) 0xA9, (byte) 0x1D, (byte) 0x06, (byte) 0xF7, (byte) 0x3D, (byte) 0x31,
       (byte) 0x58, (byte) 0x83, (byte) 0xA1, (byte) 0x5C, (byte) 0x7E, (byte) 0xDF, (byte) 0xA6, (byte) 0x50, (byte) 0x9E, (byte) 0x89, (byte) 0xA8,

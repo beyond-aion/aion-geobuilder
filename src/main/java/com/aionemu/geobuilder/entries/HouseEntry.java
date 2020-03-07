@@ -2,6 +2,7 @@ package com.aionemu.geobuilder.entries;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 public class HouseEntry extends EntityEntry {
 
@@ -12,4 +13,8 @@ public class HouseEntry extends EntityEntry {
     type = EntryType.HOUSE;
   }
 
+  @Override
+  public Stream<String> getAllMeshNames() {
+    return Stream.concat(super.getAllMeshNames(), meshes.stream());
+  }
 }
