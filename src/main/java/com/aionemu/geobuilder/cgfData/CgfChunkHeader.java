@@ -1,18 +1,16 @@
 package com.aionemu.geobuilder.cgfData;
 
-import com.aionemu.geobuilder.utils.DataInputStream;
-
-import java.io.IOException;
+import java.nio.ByteBuffer;
 
 public class CgfChunkHeader {
   public int chunkType, chunkVersion, chunkOffset, chunkId;
 
-  public static CgfChunkHeader read(DataInputStream stream) throws IOException {
+  public static CgfChunkHeader read(ByteBuffer bb) {
     CgfChunkHeader header = new CgfChunkHeader();
-    header.chunkType = stream.readInt();
-    header.chunkVersion = stream.readInt();
-    header.chunkOffset = stream.readInt();
-    header.chunkId = stream.readInt();
+    header.chunkType = bb.getInt();
+    header.chunkVersion = bb.getInt();
+    header.chunkOffset = bb.getInt();
+    header.chunkId = bb.getInt();
     return header;
   }
 }

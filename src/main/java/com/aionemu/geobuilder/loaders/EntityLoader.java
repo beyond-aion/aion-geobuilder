@@ -11,6 +11,7 @@ import org.jdom2.Element;
 import org.jdom2.input.SAXBuilder;
 
 import java.io.ByteArrayInputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,9 +26,9 @@ public class EntityLoader {
   private List<String> houseDoorEntityFileNames = new ArrayList<>();
   private List<String> doorEntityFileNames = new ArrayList<>();
 
-  public void loadPlaceables(byte[] mission, Map<String, Integer> addresses) throws Exception {
+  public void loadPlaceables(ByteBuffer mission, Map<String, Integer> addresses) throws Exception {
     clear();
-    Document document = new SAXBuilder().build(new ByteArrayInputStream(mission));
+    Document document = new SAXBuilder().build(new ByteArrayInputStream(mission.array()));
     Element rootNode = document.getRootElement();
     List<Element> entities = rootNode.getChild("Objects").getChildren("Entity");
     for (Element node : entities) {
@@ -166,7 +167,6 @@ public class EntityLoader {
           }
           if (node.getAttribute("EventType") != null && !node.getAttributeValue("EventType").isEmpty()) {
             String eventType = node.getAttributeValue("EventType");
-            entry.type = EntryType.EVENT;
             if (eventType.endsWith("_1")) {
               entry.entityId = 1;
             } else if (eventType.endsWith("_2")) {

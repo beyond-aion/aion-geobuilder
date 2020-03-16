@@ -1,9 +1,8 @@
 package com.aionemu.geobuilder.pakaccessor;
 
-import com.aionemu.geobuilder.utils.DataInputStream;
-import com.aionemu.geobuilder.utils.DataOutputStream;
-
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 class PakEndBlockHeader extends PakBlock {
 
@@ -15,14 +14,14 @@ class PakEndBlockHeader extends PakBlock {
   long centralDirOffset;
   int commentLength;
 
-  public void read(DataInputStream stream) throws IOException {
-    diskNum = Short.toUnsignedInt(stream.readShort());
-    firstDisk = Short.toUnsignedInt(stream.readShort());
-    thisDiskCentralDirCount = Short.toUnsignedInt(stream.readShort());
-    totalCentralDirCount = Short.toUnsignedInt(stream.readShort());
-    centralDirSize = Integer.toUnsignedLong(stream.readInt());
-    centralDirOffset = Integer.toUnsignedLong(stream.readInt());
-    commentLength = Short.toUnsignedInt(stream.readShort());
+  public void read(ByteBuffer stream) {
+    diskNum = Short.toUnsignedInt(stream.getShort());
+    firstDisk = Short.toUnsignedInt(stream.getShort());
+    thisDiskCentralDirCount = Short.toUnsignedInt(stream.getShort());
+    totalCentralDirCount = Short.toUnsignedInt(stream.getShort());
+    centralDirSize = Integer.toUnsignedLong(stream.getInt());
+    centralDirOffset = Integer.toUnsignedLong(stream.getInt());
+    commentLength = Short.toUnsignedInt(stream.getShort());
   }
 
   public void write(DataOutputStream stream) throws IOException {

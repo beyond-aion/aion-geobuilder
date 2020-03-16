@@ -1,87 +1,78 @@
 package com.aionemu.geobuilder.loaders;
 
 import com.aionemu.geobuilder.entries.ObjectEntry;
-import com.aionemu.geobuilder.utils.DataInputStream;
+import com.aionemu.geobuilder.meshData.ObjectMeshData;
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.input.SAXBuilder;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ObjectsLstLoader {
 
-  private final List<ObjectEntry> objectEntries = new ArrayList<>();
-  private final List<String> vegetationFileNames = new ArrayList<>();
-
-  private void loadEntries(byte[] objects, int w, int h) throws Exception {
-    try (DataInputStream stream = new DataInputStream(new ByteArrayInputStream(objects))) {
-      int signature = stream.readInt();
-      if (signature != 0x10) {
-        throw new IOException("objects.lst has wrong signature");
-      }
-      if (w <= 0 || h <= 0) {
-        throw new Exception("Map width and height are 0 or less.");
-      }
-      if (w != h) {
-        throw new Exception("Map width and height don't match.");
-      }
-
-      float magic = 32768.0f / w;
-      while (stream.available() > 0) {
-        int xPos = Short.toUnsignedInt(stream.readShort());
-        int yPos = Short.toUnsignedInt(stream.readShort());
-        int zPos = Short.toUnsignedInt(stream.readShort());
-        int objectId = Byte.toUnsignedInt(stream.readByte());
-        int unk = stream.readByte(); // values 0 and 255
-        float scale = stream.readFloat();
-        int rotZ = Byte.toUnsignedInt(stream.readByte());
-        int rotY = Byte.toUnsignedInt(stream.readByte());
-        int rotX = Byte.toUnsignedInt(stream.readByte());
-        byte unk2 = stream.readByte();
-
-        ObjectEntry entry = new ObjectEntry();
-        entry.x = xPos / magic;
-        entry.y = yPos / magic;
-        entry.z = zPos / magic;
-        entry.scale = scale;
-        entry.rotX = rotX * 360 / 255f;
-        entry.rotY = rotY * 360 / 255f;
-        entry.rotZ = rotZ * 360 / 255f;
-        entry.objectId = objectId;
-
-        objectEntries.add(entry);
-      }
-    }
+  private ObjectsLstLoader() {
   }
 
-  public void loadLevelData(byte[] levelData, byte[] objects) throws Exception {
-    clear();
+  public static ObjectMeshData loadLevelData(ByteBuffer levelData, ByteBuffer objects) throws Exception {
+    ObjectMeshData objectMeshData = new ObjectMeshData();
     // read client maps
-    Document document = new SAXBuilder().build(new ByteArrayInputStream(levelData));
+    Document document = new SAXBuilder().build(new ByteArrayInputStream(levelData.array()));
     Element rootNode = document.getRootElement();
     List<Element> vegetation = rootNode.getChildren("Vegetation").get(0).getChildren();
 
+    objectMeshData.meshFiles = new ArrayList<>(vegetation.size());
     for (Element element : vegetation) {
-      vegetationFileNames.add(element.getAttributeValue("FileName").toLowerCase().replace('\\', '/').trim());
+      objectMeshData.meshFiles.add(element.getAttributeValue("FileName").toLowerCase().replace('\\', '/').trim());
     }
     int w = Integer.parseInt(rootNode.getChild("LevelInfo").getAttributeValue("HeightmapXSize"));
     int h = Integer.parseInt(rootNode.getChild("LevelInfo").getAttributeValue("HeightmapYSize"));
-    loadEntries(objects, w, h);
+    loadEntries(objects, w, h, objectMeshData);
+    return objectMeshData;
   }
 
-  public void clear() {
-    objectEntries.clear();
-    vegetationFileNames.clear();
-  }
+  private static void loadEntries(ByteBuffer objects, int w, int h, ObjectMeshData objectMeshData) throws Exception {
+    objectMeshData.objectEntries = new ArrayList<>();
 
-  public List<ObjectEntry> getObjectEntries() {
-    return (List<ObjectEntry>) ((ArrayList<ObjectEntry>) objectEntries).clone();
-  }
+    int signature = objects.getInt();
+    if (signature != 0x10) {
+      throw new IOException("objects.lst has wrong signature");
+    }
+    if (w <= 0 || h <= 0) {
+      throw new Exception("Map width and height are 0 or less.");
+    }
+    if (w != h) {
+      throw new Exception("Map width and height don't match.");
+    }
 
-  public List<String> getVegetationFileNames() {
-    return (List<String>) ((ArrayList<String>) vegetationFileNames).clone();
+    float magic = 32768.0f / w;
+    while (objects.remaining() > 0) {
+      int xPos = Short.toUnsignedInt(objects.getShort());
+      int yPos = Short.toUnsignedInt(objects.getShort());
+      int zPos = Short.toUnsignedInt(objects.getShort());
+      int objectId = Byte.toUnsignedInt(objects.get());
+      int unk = objects.get(); // values 0 and 255
+      float scale = objects.getFloat();
+      int rotZ = Byte.toUnsignedInt(objects.get());
+      int rotY = Byte.toUnsignedInt(objects.get());
+      int rotX = Byte.toUnsignedInt(objects.get());
+      byte unk2 = objects.get();
+
+      ObjectEntry entry = new ObjectEntry();
+      entry.x = xPos / magic;
+      entry.y = yPos / magic;
+      entry.z = zPos / magic;
+      entry.scale = scale;
+      entry.rotX = rotX * 360 / 255f;
+      entry.rotY = rotY * 360 / 255f;
+      entry.rotZ = rotZ * 360 / 255f;
+      entry.objectId = objectId;
+
+      objectMeshData.objectEntries.add(entry);
+    }
   }
 }

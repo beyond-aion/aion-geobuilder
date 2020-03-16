@@ -30,12 +30,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.aionemu.geobuilder.math;
+package com.aionemu.geobuilder.utils;
 
-
-import com.aionemu.geobuilder.utils.BufferUtils;
-import com.aionemu.geobuilder.utils.Quaternion;
-import com.aionemu.geobuilder.utils.Vector3;
 
 import java.nio.FloatBuffer;
 import java.util.logging.Logger;
@@ -560,34 +556,6 @@ public final class Matrix4f implements Cloneable {
     return this;
   }
   
-  
-  /**
-   * <code>toFloatBuffer</code> returns a FloatBuffer object that contains
-   * the matrix data.
-   * 
-   * @return matrix data as a FloatBuffer.
-   */
-  public FloatBuffer toFloatBuffer() {
-  	return toFloatBuffer(false);
-  }
-
-  /**
-   * <code>toFloatBuffer</code> returns a FloatBuffer object that contains the
-   * matrix data.
-   * 
-   * @param columnMajor
-   *            if true, this buffer should be filled with column major data,
-   *            otherwise it will be filled row major.
-   * @return matrix data as a FloatBuffer. The position is set to 0 for
-   *         convenience.
-   */
-  public FloatBuffer toFloatBuffer(boolean columnMajor) {
-  	FloatBuffer fb = BufferUtils.createFloatBuffer(16);
-  	fillFloatBuffer(fb, columnMajor);
-  	fb.rewind();
-  	return fb;
-  }
-  
   /**
    * <code>fillFloatBuffer</code> fills a FloatBuffer object with
    * the matrix data.
@@ -718,58 +686,6 @@ public final class Matrix4f implements Cloneable {
       // D
       m34 = -(2.0f * far * near) / (far - near);
     }
-  }
-
-  /**
-   * <code>fromAngleAxis</code> sets this matrix4f to the values specified
-   * by an angle and an axis of rotation.  This method creates an object, so
-   * use fromAngleNormalAxis if your axis is already normalized.
-   * 
-   * @param angle
-   *            the angle to rotate (in radians).
-   * @param axis
-   *            the axis of rotation.
-   */
-  public void fromAngleAxis(float angle, Vector3f axis) {
-    Vector3f normAxis = axis.normalize();
-    fromAngleNormalAxis(angle, normAxis);
-  }
-
-  /**
-   * <code>fromAngleNormalAxis</code> sets this matrix4f to the values
-   * specified by an angle and a normalized axis of rotation.
-   * 
-   * @param angle
-   *            the angle to rotate (in radians).
-   * @param axis
-   *            the axis of rotation (already normalized).
-   */
-  public void fromAngleNormalAxis(float angle, Vector3f axis) {
-    zero();
-    m44 = 1;
-
-    float fCos = FastMath.cos(angle);
-    float fSin = FastMath.sin(angle);
-    float fOneMinusCos = ((float)1.0)-fCos;
-    float fX2 = axis.x*axis.x;
-    float fY2 = axis.y*axis.y;
-    float fZ2 = axis.z*axis.z;
-    float fXYM = axis.x*axis.y*fOneMinusCos;
-    float fXZM = axis.x*axis.z*fOneMinusCos;
-    float fYZM = axis.y*axis.z*fOneMinusCos;
-    float fXSin = axis.x*fSin;
-    float fYSin = axis.y*fSin;
-    float fZSin = axis.z*fSin;
-    
-    m11 = fX2*fOneMinusCos+fCos;
-    m12 = fXYM-fZSin;
-    m13 = fXZM+fYSin;
-    m21 = fXYM+fZSin;
-    m22 = fY2*fOneMinusCos+fCos;
-    m23 = fYZM-fXSin;
-    m31 = fXZM-fYSin;
-    m32 = fYZM+fXSin;
-    m33 = fZ2*fOneMinusCos+fCos;
   }
 
   /**
@@ -934,125 +850,6 @@ public final class Matrix4f implements Cloneable {
   }
 
   /**
-   * <code>mult</code> multiplies a vector about a rotation matrix. The
-   * resulting vector is returned as a new Vector3f.
-   * 
-   * @param vec
-   *            vec to multiply against.
-   * @return the rotated vector.
-   */
-  public Vector3f mult(Vector3f vec) {
-    return mult(vec, null);
-  }
-
-  /**
-   * <code>mult</code> multiplies a vector about a rotation matrix and adds
-   * translation. The resulting vector is returned.
-   * 
-   * @param vec
-   *            vec to multiply against.
-   * @param store
-   *            a vector to store the result in. Created if null is passed.
-   * @return the rotated vector.
-   */
-  public Vector3f mult(Vector3f vec, Vector3f store) {
-    if (store == null) store = new Vector3f();
-    
-    float vx = vec.x, vy = vec.y, vz = vec.z;
-    store.x = m11 * vx + m12 * vy + m13 * vz + m14;
-    store.y = m21 * vx + m22 * vy + m23 * vz + m24;
-    store.z = m31 * vx + m32 * vy + m33 * vz + m34;
-
-    return store;
-  }
-
-  /**
-   * <code>multNormal</code> multiplies a vector about a rotation matrix, but
-   * does not add translation. The resulting vector is returned.
-   *
-   * @param vec
-   *            vec to multiply against.
-   * @param store
-   *            a vector to store the result in. Created if null is passed.
-   * @return the rotated vector.
-   */
-  public Vector3f multNormal(Vector3f vec, Vector3f store) {
-    if (store == null) store = new Vector3f();
-
-    float vx = vec.x, vy = vec.y, vz = vec.z;
-    store.x = m11 * vx + m12 * vy + m13 * vz;
-    store.y = m21 * vx + m22 * vy + m23 * vz;
-    store.z = m31 * vx + m32 * vy + m33 * vz;
-
-    return store;
-  }
-
-  /**
-   * <code>multNormal</code> multiplies a vector about a rotation matrix, but
-   * does not add translation. The resulting vector is returned.
-   *
-   * @param vec
-   *            vec to multiply against.
-   * @param store
-   *            a vector to store the result in. Created if null is passed.
-   * @return the rotated vector.
-   */
-  public Vector3f multNormalAcross(Vector3f vec, Vector3f store) {
-    if (store == null) store = new Vector3f();
-
-    float vx = vec.x, vy = vec.y, vz = vec.z;
-    store.x = m11 * vx + m21 * vy + m31 * vz;
-    store.y = m12 * vx + m22 * vy + m32 * vz;
-    store.z = m13 * vx + m23 * vy + m33 * vz;
-
-    return store;
-  }
-
-  /**
-   * <code>mult</code> multiplies a vector about a rotation matrix and adds
-   * translation. The w value is returned as a result of
-   * multiplying the last column of the matrix by 1.0
-   * 
-   * @param vec
-   *            vec to multiply against.
-   * @param store
-   *            a vector to store the result in. 
-   * @return the W value
-   */
-  public float multProj(Vector3f vec, Vector3f store) {
-    float vx = vec.x, vy = vec.y, vz = vec.z;
-    store.x = m11 * vx + m12 * vy + m13 * vz + m14;
-    store.y = m21 * vx + m22 * vy + m23 * vz + m24;
-    store.z = m31 * vx + m32 * vy + m33 * vz + m34;
-    return    m41 * vx + m42 * vy + m43 * vz + m44;
-  }
-
-  /**
-   * <code>mult</code> multiplies a vector about a rotation matrix. The
-   * resulting vector is returned.
-   * 
-   * @param vec
-   *            vec to multiply against.
-   * @param store
-   *            a vector to store the result in.  created if null is passed.
-   * @return the rotated vector.
-   */
-  public Vector3f multAcross(Vector3f vec, Vector3f store) {
-    if (null == vec) {
-      logger.info("Source vector is null, null result returned.");
-      return null;
-    }
-    if (store == null) store = new Vector3f();
-    
-    float vx = vec.x, vy = vec.y, vz = vec.z;
-    store.x = m11 * vx + m21 * vy + m31 * vz + m41 * 1;
-    store.y = m12 * vx + m22 * vy + m32 * vz + m42 * 1;
-    store.z = m13 * vx + m23 * vy + m33 * vz + m43 * 1;
-
-    return store;
-  }
-  
-  /**
    * <code>mult</code> multiplies an array of 4 floats against this rotation 
    * matrix. The results are stored directly in the array. (vec4f x mat4f)
    * 
@@ -1099,128 +896,6 @@ public final class Matrix4f implements Cloneable {
 
     return vec4f;
   }
-
-  /**
-   * Inverts this matrix as a new Matrix4f.
-   * 
-   * @return The new inverse matrix
-   */
-  public Matrix4f invert() {
-    return invert(null);
-  }
-
-  /**
-   * Inverts this matrix and stores it in the given store.
-   * 
-   * @return The store
-   */
-  public Matrix4f invert(Matrix4f store) {
-    if (store == null) store = new Matrix4f();
-
-    float fA0 = m11 * m22 - m12 * m21;
-    float fA1 = m11 * m23 - m13 * m21;
-    float fA2 = m11 * m24 - m14 * m21;
-    float fA3 = m12 * m23 - m13 * m22;
-    float fA4 = m12 * m24 - m14 * m22;
-    float fA5 = m13 * m24 - m14 * m23;
-    float fB0 = m31 * m42 - m32 * m41;
-    float fB1 = m31 * m43 - m33 * m41;
-    float fB2 = m31 * m44 - m34 * m41;
-    float fB3 = m32 * m43 - m33 * m42;
-    float fB4 = m32 * m44 - m34 * m42;
-    float fB5 = m33 * m44 - m34 * m43;
-    float fDet = fA0*fB5-fA1*fB4+fA2*fB3+fA3*fB2-fA4*fB1+fA5*fB0;
-
-    if ( FastMath.abs(fDet) <= 0f )
-      throw new ArithmeticException("This matrix cannot be inverted");
-
-    store.m11 = +m22 *fB5 - m23 *fB4 + m24 *fB3;
-    store.m21 = -m21 *fB5 + m23 *fB2 - m24 *fB1;
-    store.m31 = +m21 *fB4 - m22 *fB2 + m24 *fB0;
-    store.m41 = -m21 *fB3 + m22 *fB1 - m23 *fB0;
-    store.m12 = -m12 *fB5 + m13 *fB4 - m14 *fB3;
-    store.m22 = +m11 *fB5 - m13 *fB2 + m14 *fB1;
-    store.m32 = -m11 *fB4 + m12 *fB2 - m14 *fB0;
-    store.m42 = +m11 *fB3 - m12 *fB1 + m13 *fB0;
-    store.m13 = +m42 *fA5 - m43 *fA4 + m44 *fA3;
-    store.m23 = -m41 *fA5 + m43 *fA2 - m44 *fA1;
-    store.m33 = +m41 *fA4 - m42 *fA2 + m44 *fA0;
-    store.m43 = -m41 *fA3 + m42 *fA1 - m43 *fA0;
-    store.m14 = -m32 *fA5 + m33 *fA4 - m34 *fA3;
-    store.m24 = +m31 *fA5 - m33 *fA2 + m34 *fA1;
-    store.m34 = -m31 *fA4 + m32 *fA2 - m34 *fA0;
-    store.m44 = +m31 *fA3 - m32 *fA1 + m33 *fA0;
-
-    float fInvDet = 1.0f/fDet;
-    store.multLocal(fInvDet);
-
-    return store;
-  }
-
-  /**
-   * Inverts this matrix locally.
-   * 
-   * @return this
-   */
-  public Matrix4f invertLocal() {
-
-    float fA0 = m11 * m22 - m12 * m21;
-    float fA1 = m11 * m23 - m13 * m21;
-    float fA2 = m11 * m24 - m14 * m21;
-    float fA3 = m12 * m23 - m13 * m22;
-    float fA4 = m12 * m24 - m14 * m22;
-    float fA5 = m13 * m24 - m14 * m23;
-    float fB0 = m31 * m42 - m32 * m41;
-    float fB1 = m31 * m43 - m33 * m41;
-    float fB2 = m31 * m44 - m34 * m41;
-    float fB3 = m32 * m43 - m33 * m42;
-    float fB4 = m32 * m44 - m34 * m42;
-    float fB5 = m33 * m44 - m34 * m43;
-    float fDet = fA0*fB5-fA1*fB4+fA2*fB3+fA3*fB2-fA4*fB1+fA5*fB0;
-
-    if ( FastMath.abs(fDet) <= 0f )
-      return zero();
-
-    float f00 = +m22 *fB5 - m23 *fB4 + m24 *fB3;
-    float f10 = -m21 *fB5 + m23 *fB2 - m24 *fB1;
-    float f20 = +m21 *fB4 - m22 *fB2 + m24 *fB0;
-    float f30 = -m21 *fB3 + m22 *fB1 - m23 *fB0;
-    float f01 = -m12 *fB5 + m13 *fB4 - m14 *fB3;
-    float f11 = +m11 *fB5 - m13 *fB2 + m14 *fB1;
-    float f21 = -m11 *fB4 + m12 *fB2 - m14 *fB0;
-    float f31 = +m11 *fB3 - m12 *fB1 + m13 *fB0;
-    float f02 = +m42 *fA5 - m43 *fA4 + m44 *fA3;
-    float f12 = -m41 *fA5 + m43 *fA2 - m44 *fA1;
-    float f22 = +m41 *fA4 - m42 *fA2 + m44 *fA0;
-    float f32 = -m41 *fA3 + m42 *fA1 - m43 *fA0;
-    float f03 = -m32 *fA5 + m33 *fA4 - m34 *fA3;
-    float f13 = +m31 *fA5 - m33 *fA2 + m34 *fA1;
-    float f23 = -m31 *fA4 + m32 *fA2 - m34 *fA0;
-    float f33 = +m31 *fA3 - m32 *fA1 + m33 *fA0;
-    
-    m11 = f00;
-    m12 = f01;
-    m13 = f02;
-    m14 = f03;
-    m21 = f10;
-    m22 = f11;
-    m23 = f12;
-    m24 = f13;
-    m31 = f20;
-    m32 = f21;
-    m33 = f22;
-    m34 = f23;
-    m41 = f30;
-    m42 = f31;
-    m43 = f32;
-    m44 = f33;
-
-    float fInvDet = 1.0f/fDet;
-    multLocal(fInvDet);
-
-    return this;
-  }
-  
   /**
    * Returns a new matrix representing the adjoint of this matrix.
    * 
@@ -1355,55 +1030,10 @@ public final class Matrix4f implements Cloneable {
     m44 += mat.m44;
   }
   
-  public Vector3f toTranslationVector() {
-    return new Vector3f(m14, m24, m34);
-  }
-  
-  public void toTranslationVector(Vector3f vector) {
-    vector.set(m14, m24, m34);
-  }
-  
-  public Matrix3f toRotationMatrix() {
-    return new Matrix3f(m11, m12, m13, m21, m22, m23, m31, m32, m33);
-    
-  }
-  
-  public void toRotationMatrix(Matrix3f mat) {
-    mat.m00 = m11;
-    mat.m01 = m12;
-    mat.m02 = m13;
-    mat.m10 = m21;
-    mat.m11 = m22;
-    mat.m12 = m23;
-    mat.m20 = m31;
-    mat.m21 = m32;
-    mat.m22 = m33;
-    
-  }
-
-  public void setRotationMatrix(Matrix3f mat) {
-    this.m11 = mat.m00;
-    this.m12 = mat.m01;
-    this.m13 = mat.m02;
-    this.m21 = mat.m10;
-    this.m22 = mat.m11;
-    this.m23 = mat.m12;
-    this.m31 = mat.m20;
-    this.m32 = mat.m21;
-    this.m33 = mat.m22;
-    
-  }
-  
   public void setScale(float x, float y, float z){
     m11 *= x;
     m22 *= y;
     m33 *= z;
-  }
-
-  public void setScale(Vector3f scale){
-    m11 *= scale.x;
-    m22 *= scale.y;
-    m33 *= scale.z;
   }
 
   /**
@@ -1439,18 +1069,6 @@ public final class Matrix4f implements Cloneable {
   }
 
   /**
-   * <code>setTranslation</code> will set the matrix's translation values.
-   *
-   * @param translation
-   *            the new values for the translation.
-   */
-  public void setTranslation(Vector3f translation) {
-    m14 = translation.x;
-    m24 = translation.y;
-    m34 = translation.z;
-  }
-
-  /**
    * <code>setInverseTranslation</code> will set the matrix's inverse
    * translation values.
    * 
@@ -1465,98 +1083,6 @@ public final class Matrix4f implements Cloneable {
     m14 = -translation[0];
     m24 = -translation[1];
     m34 = -translation[2];
-  }
-
-  /**
-   * <code>angleRotation</code> sets this matrix to that of a rotation about
-   * three axes (x, y, z). Where each axis has a specified rotation in
-   * degrees. These rotations are expressed in a single <code>Vector3f</code>
-   * object.
-   * 
-   * @param angles
-   *            the angles to rotate.
-   */
-  public void angleRotation(Vector3f angles) {
-    float angle;
-    float sr, sp, sy, cr, cp, cy;
-
-    angle = (angles.z * FastMath.DEG_TO_RAD);
-    sy = FastMath.sin(angle);
-    cy = FastMath.cos(angle);
-    angle = (angles.y * FastMath.DEG_TO_RAD);
-    sp = FastMath.sin(angle);
-    cp = FastMath.cos(angle);
-    angle = (angles.x * FastMath.DEG_TO_RAD);
-    sr = FastMath.sin(angle);
-    cr = FastMath.cos(angle);
-
-    // matrix = (Z * Y) * X
-    m11 = cp * cy;
-    m21 = cp * sy;
-    m31 = -sp;
-    m12 = sr * sp * cy + cr * -sy;
-    m22 = sr * sp * sy + cr * cy;
-    m32 = sr * cp;
-    m13 = (cr * sp * cy + -sr * -sy);
-    m23 = (cr * sp * sy + -sr * cy);
-    m33 = cr * cp;
-    m14 = 0.0f;
-    m24 = 0.0f;
-    m34 = 0.0f;
-  }
-
-  /**
-   * <code>setInverseRotationRadians</code> builds an inverted rotation from
-   * Euler angles that are in radians.
-   * 
-   * @param angles
-   *            the Euler angles in radians.
-   * @throws JmeException
-   *             if angles is not size 3.
-   */
-  public void setInverseRotationRadians(float[] angles) {
-    if (angles.length != 3) { throw new IllegalArgumentException(
-        "Angles must be of size 3."); }
-    double cr = FastMath.cos(angles[0]);
-    double sr = FastMath.sin(angles[0]);
-    double cp = FastMath.cos(angles[1]);
-    double sp = FastMath.sin(angles[1]);
-    double cy = FastMath.cos(angles[2]);
-    double sy = FastMath.sin(angles[2]);
-
-    m11 = (float) (cp * cy);
-    m21 = (float) (cp * sy);
-    m31 = (float) (-sp);
-
-    double srsp = sr * sp;
-    double crsp = cr * sp;
-
-    m12 = (float) (srsp * cy - cr * sy);
-    m22 = (float) (srsp * sy + cr * cy);
-    m32 = (float) (sr * cp);
-
-    m13 = (float) (crsp * cy + sr * sy);
-    m23 = (float) (crsp * sy - sr * cy);
-    m33 = (float) (cr * cp);
-  }
-
-  /**
-   * <code>setInverseRotationDegrees</code> builds an inverted rotation from
-   * Euler angles that are in degrees.
-   * 
-   * @param angles
-   *            the Euler angles in degrees.
-   * @throws JmeException
-   *             if angles is not size 3.
-   */
-  public void setInverseRotationDegrees(float[] angles) {
-    if (angles.length != 3) { throw new IllegalArgumentException(
-        "Angles must be of size 3."); }
-    float vec[] = new float[3];
-    vec[0] = (angles[0] * FastMath.RAD_TO_DEG);
-    vec[1] = (angles[1] * FastMath.RAD_TO_DEG);
-    vec[2] = (angles[2] * FastMath.RAD_TO_DEG);
-    setInverseRotationRadians(vec);
   }
 
   /**
@@ -1579,65 +1105,9 @@ public final class Matrix4f implements Cloneable {
   }
 
   /**
-   * 
-   * <code>inverseTranslateVect</code> translates a given Vector3f by the
-   * translation part of this matrix.
-   * 
-   * @param data
-   *            the Vector3f to be translated.
-   * @throws JmeException
-   *             if the size of the Vector3f is not 3.
-   */
-  public void inverseTranslateVect(Vector3f data) {
-    data.x -= m14;
-    data.y -= m24;
-    data.z -= m34;
-  }
-
-  /**
-   * 
-   * <code>inverseTranslateVect</code> translates a given Vector3f by the
-   * translation part of this matrix.
-   * 
-   * @param data
-   *            the Vector3f to be translated.
-   * @throws JmeException
-   *             if the size of the Vector3f is not 3.
-   */
-  public void translateVect(Vector3f data) {
-    data.x += m14;
-    data.y += m24;
-    data.z += m34;
-  }
-
-  /**
-   * 
-   * <code>inverseRotateVect</code> rotates a given Vector3f by the rotation
-   * part of this matrix.
-   * 
-   * @param vec
-   *            the Vector3f to be rotated.
-   */
-  public void inverseRotateVect(Vector3f vec) {
-    float vx = vec.x, vy = vec.y, vz = vec.z;
-
-    vec.x = vx * m11 + vy * m21 + vz * m31;
-    vec.y = vx * m12 + vy * m22 + vz * m32;
-    vec.z = vx * m13 + vy * m23 + vz * m33;
-  }
-  
-  public void rotateVect(Vector3f vec) {
-    float vx = vec.x, vy = vec.y, vz = vec.z;
-
-    vec.x = vx * m11 + vy * m12 + vz * m13;
-    vec.y = vx * m21 + vy * m22 + vz * m23;
-    vec.z = vx * m31 + vy * m32 + vz * m33;
-  }
-
-  /**
    * <code>toString</code> returns the string representation of this object.
    * It is in a format of a 4x4 matrix. For example, an identity matrix would
-   * be represented by the following string. com.jme.math.Matrix3f <br>[<br>
+   * be represented by the following string. com.jme.databuilders.utils.Matrix4f <br>[<br>
    * 1.0  0.0  0.0  0.0 <br>
    * 0.0  1.0  0.0  0.0 <br>
    * 0.0  0.0  1.0  0.0 <br>
@@ -1776,27 +1246,6 @@ public final class Matrix4f implements Cloneable {
     (m21 == 0 && m22 == 1 && m23 == 0 && m24 == 0) &&
     (m31 == 0 && m32 == 0 && m33 == 1 && m34 == 0) &&
     (m41 == 0 && m42 == 0 && m43 == 0 && m44 == 1);
-  }
-
-  /**
-   * Apply a scale to this matrix.
-   * 
-   * @param scale
-   *            the scale to apply
-   */
-  public void scale(Vector3f scale) {
-    m11 *= scale.getX();
-    m21 *= scale.getX();
-    m31 *= scale.getX();
-    m41 *= scale.getX();
-    m12 *= scale.getY();
-    m22 *= scale.getY();
-    m32 *= scale.getY();
-    m42 *= scale.getY();
-    m13 *= scale.getZ();
-    m23 *= scale.getZ();
-    m33 *= scale.getZ();
-    m43 *= scale.getZ();
   }
 
   /**

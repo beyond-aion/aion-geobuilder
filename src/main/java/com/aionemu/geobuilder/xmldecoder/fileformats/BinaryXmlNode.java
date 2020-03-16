@@ -6,8 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.aionemu.geobuilder.xmldecoder.helpers.StreamHelpers;
-
 public class BinaryXmlNode {
 
 	public String Name;
@@ -20,7 +18,7 @@ public class BinaryXmlNode {
 		this.Attributes = new HashMap<>();
 		this.Children = new ArrayList<>();
 		this.Value = null;
-		int num1 = StreamHelpers.ReadU8(input);
+		int num1 = input.read();
 		if ((num1 & 1) == 1)
 			this.Value = table.getData(BinaryXmlFileHelpers.ReadPackedS32(input));
 		if ((num1 & 2) == 2) {

@@ -1,9 +1,8 @@
 package com.aionemu.geobuilder.pakaccessor;
 
-import com.aionemu.geobuilder.utils.DataInputStream;
-import com.aionemu.geobuilder.utils.DataOutputStream;
-
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 class PakCentralDirHeader extends PakBlock {
 
@@ -28,29 +27,28 @@ class PakCentralDirHeader extends PakBlock {
 
   byte fileNameBytes[];
 
-  public void read(DataInputStream stream) throws IOException {
-    createVersion = stream.readByte();
-    createSystem = stream.readByte();
-    extractVersion = stream.readByte();
-    extractSystem = stream.readByte();
-    flags = stream.readShort();
-    compType = stream.readShort();
-    time = stream.readShort();
-    date = stream.readShort();
-    crc = stream.readInt();
-    compressedSz = stream.readInt();
-    uncompressedSz = stream.readInt();
-    fileNameSz = stream.readShort();
-    extraFieldsSz = stream.readShort();
-    commentSz = stream.readShort();
-    diskNumStart = stream.readShort();
-    intFileAttr = stream.readShort();
-    extFileAttr = stream.readInt();
-    localHeaderOffset = stream.readInt();
+  public void read(ByteBuffer stream) {
+    createVersion = stream.get();
+    createSystem = stream.get();
+    extractVersion = stream.get();
+    extractSystem = stream.get();
+    flags = stream.getShort();
+    compType = stream.getShort();
+    time = stream.getShort();
+    date = stream.getShort();
+    crc = stream.getInt();
+    compressedSz = stream.getInt();
+    uncompressedSz = stream.getInt();
+    fileNameSz = stream.getShort();
+    extraFieldsSz = stream.getShort();
+    commentSz = stream.getShort();
+    diskNumStart = stream.getShort();
+    intFileAttr = stream.getShort();
+    extFileAttr = stream.getInt();
+    localHeaderOffset = stream.getInt();
 
     fileNameBytes = new byte[fileNameSz];
-    if (stream.read(fileNameBytes) != fileNameSz)
-      throw new IOException("Cannot read file name from Dir block");
+    stream.get(fileNameBytes);
   }
 
   public void write(DataOutputStream stream) throws IOException {

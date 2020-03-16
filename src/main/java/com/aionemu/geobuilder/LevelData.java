@@ -5,6 +5,7 @@ import com.aionemu.geobuilder.meshData.BrushLstMeshData;
 import com.aionemu.geobuilder.meshData.ObjectMeshData;
 
 import java.io.File;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -17,7 +18,7 @@ public class LevelData {
   public final String levelName;
   public final File clientLevelFolder;
   public final File clientLevelPakFile;
-  public volatile byte[] landMapH32;
+  public volatile ByteBuffer landMapH32;
   public volatile byte[] terrainMaterials;
   public volatile BrushLstMeshData brushMeshData;
   public volatile ObjectMeshData objectMeshData;
@@ -37,7 +38,7 @@ public class LevelData {
 
   public Set<String> getAllMeshFileNames() {
     Stream<Stream<String>> streams = Stream.of(
-      brushMeshData == null ? Stream.empty() : brushMeshData.meshFiles.stream(),
+      brushMeshData == null ? Stream.empty() : brushMeshData.meshFileNames.stream(),
       objectMeshData == null ? Stream.empty() : objectMeshData.meshFiles.stream(),
       entityEntries.stream().flatMap(EntityEntry::getAllMeshNames)
     );

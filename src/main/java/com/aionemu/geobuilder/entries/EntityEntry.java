@@ -1,7 +1,7 @@
 package com.aionemu.geobuilder.entries;
 
 import com.aionemu.geobuilder.utils.Vector3;
-import com.aionemu.geobuilder.math.Matrix4f;
+import com.aionemu.geobuilder.utils.Matrix4f;
 
 import java.util.stream.Stream;
 

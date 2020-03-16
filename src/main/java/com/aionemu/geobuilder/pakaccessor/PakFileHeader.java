@@ -1,9 +1,8 @@
 package com.aionemu.geobuilder.pakaccessor;
 
-import com.aionemu.geobuilder.utils.DataInputStream;
-import com.aionemu.geobuilder.utils.DataOutputStream;
-
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 class PakFileHeader extends PakBlock {
 
@@ -31,22 +30,21 @@ class PakFileHeader extends PakBlock {
     return 4 + 26 + fileNameSz + extraFieldsSz;
   }
 
-  public void read(DataInputStream stream) throws IOException {
-    extractVersion = stream.readByte();
-    extractSystem = stream.readByte();
-    flags = stream.readShort();
-    compMethod = stream.readShort();
-    lastModTime = stream.readShort();
-    lastModDate = stream.readShort();
-    crc = stream.readInt();
-    compressedSz = stream.readInt();
-    uncompressedSz = stream.readInt();
-    fileNameSz = stream.readShort();
-    extraFieldsSz = stream.readShort();
+  public void read(ByteBuffer stream) throws IOException {
+    extractVersion = stream.get();
+    extractSystem = stream.get();
+    flags = stream.getShort();
+    compMethod = stream.getShort();
+    lastModTime = stream.getShort();
+    lastModDate = stream.getShort();
+    crc = stream.getInt();
+    compressedSz = stream.getInt();
+    uncompressedSz = stream.getInt();
+    fileNameSz = stream.getShort();
+    extraFieldsSz = stream.getShort();
 
     fileNameBytes = new byte[fileNameSz];
-    if (stream.read(fileNameBytes) != fileNameSz)
-      throw new PakFileFormatException("Cannot read file name from File block");
+    stream.get(fileNameBytes);
     if (compMethod != 0 && compMethod != 8)
       throw new PakFileFormatException("Unknown compression method " + compMethod);
   }

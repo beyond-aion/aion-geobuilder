@@ -6,6 +6,6 @@ import java.util.List;
 
 public class BrushLstMeshData {
 
-  public List<String> meshFiles;
+  public List<String> meshFileNames;
   public List<BrushEntry> brushEntries; // BrushEntry.meshIdx is the index for its name in meshFiles list
 }
