@@ -11,11 +11,12 @@ import com.aionemu.geobuilder.pakaccessor.PakFile;
 import com.aionemu.geobuilder.utils.BinaryXmlDecoder;
 import com.aionemu.geobuilder.utils.Matrix4f;
 import com.aionemu.geobuilder.utils.Vector3;
+import com.beust.jcommander.Parameter;
+import com.beust.jcommander.converters.FileConverter;
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.JDOMException;
 import org.jdom2.input.SAXBuilder;
-import org.kohsuke.args4j.Option;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -31,19 +32,19 @@ import java.util.stream.Collectors;
 
 public class AionLevelsProcessor {
 
-  @Option(name = "-c", usage = "Client path.", metaVar = "PATH", required = true)
+  @Parameter(description = "<client path>", converter = FileConverter.class, required = true)
   protected File clientPath;
 
-  @Option(name = "-lvl", usage = "Level-Id to generate geodata for e.g. 110010000. default: all levels. ", metaVar = "LVLID")
+  @Parameter(names = "-lvl", description = "Level-Id to generate geodata for e.g. 110010000. default: all levels. ", order = 1)
   protected String levelId = null;
 
-  @Option(name = "-w", usage = "Path to server world_maps.xml or client WorldId.xml. default: client WorldId.xml", metaVar = "PATH")
+  @Parameter(names = "-w", description = "Path to server world_maps.xml or client WorldId.xml. default: client WorldId.xml", order = 2)
   protected File worldIdPath;
 
-  @Option(name = "-o", usage = "Path to the output folder.", metaVar = "PATH")
+  @Parameter(names = "-o", description = "Path to the output folder", order = 3)
   protected File outPath = new File("./out");
 
-  @Option(name = "-v", usage = "Activate verbose logging.")
+  @Parameter(names = "-v", description = "Activate verbose logging", order = 4)
   protected boolean verbose;
 
   private static final Logger log = Logger.getLogger("GeoBuilder");
@@ -83,12 +84,12 @@ public class AionLevelsProcessor {
 
   private static final int H32_POINT_SIZE = 3;
 
-  private Set<String> requiredCgfs = ConcurrentHashMap.newKeySet();
-  private Set<String> requiredDoorCgas = ConcurrentHashMap.newKeySet();
+  private final Set<String> requiredCgfs = ConcurrentHashMap.newKeySet();
+  private final Set<String> requiredDoorCgas = ConcurrentHashMap.newKeySet();
 
-  private Set<String> processedCgfs = ConcurrentHashMap.newKeySet();
-  private List<String> missingCgfs = new ArrayList<>();
-  private Set<String> emptyCgfs = ConcurrentHashMap.newKeySet();
+  private final Set<String> processedCgfs = ConcurrentHashMap.newKeySet();
+  private final List<String> missingCgfs = new ArrayList<>();
+  private final Set<String> emptyCgfs = ConcurrentHashMap.newKeySet();
 
   protected void process() {
     log.setLevel(verbose ? Level.ALL : Level.INFO);
