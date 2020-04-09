@@ -566,7 +566,7 @@ public class CgfLoader {
       int matIdx = bb.getInt();
       CgfMaterialData material = materialData.get(materialIdx.get(matIdx));
       if (isMaterialCollideable(material)) {
-        if (isMaterialIntention(material.materialId)) {
+        if (isMaterialIntention(material.materialId) || material.materialId >= 6 && material.materialId <= 9) {
           if (!result.indices.containsKey(matIdx)) {
             result.indices.put(matIdx, new ArrayList<>());
           }
