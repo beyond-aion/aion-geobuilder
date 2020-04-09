@@ -700,7 +700,10 @@ public class CgfLoader {
               meshData.collisionIntention |= CollisionIntention.MATERIAL.getId();
               meshData.materialId = matData.materialId;
             }
-            if (meshData.materialId >= 1 && meshData.materialId <= 9) {
+            if (matData.materialId >= 1 && matData.materialId <= 9) {
+              if (matData.materialId > 5) {
+                meshData.collisionIntention = 0;
+              }
               meshData.collisionIntention |= CollisionIntention.WALK.getId();
             }
             meshes.add(meshData);
