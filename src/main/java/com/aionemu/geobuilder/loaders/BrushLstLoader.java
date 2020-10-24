@@ -83,14 +83,14 @@ public class BrushLstLoader {
         throw new IOException("Out of range event type " + eventType);
       }
       BrushEntry entry = new BrushEntry();
-      entry.eventType = (byte) eventType;
-      entry.type = EntryType.EVENT;
+      if (eventType > 0) {
+        entry.eventType = (byte) eventType;
+        entry.type = EntryType.EVENT;
+        EVENT_MESHES.add(meshData.meshFileNames.get(meshIdx));
+      }
       entry.meshIdx = meshIdx;
       entry.matrix = meshMatrix;
       meshData.brushEntries.add(entry);
-      if (eventType > 0) {
-        EVENT_MESHES.add(meshData.meshFileNames.get(entry.meshIdx));
-      }
 
       brushLst.getInt(); // 3 unk
       if (meshDataBlockSize > 16)
