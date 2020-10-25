@@ -701,10 +701,11 @@ public class CgfLoader {
               meshData.materialId = matData.materialId;
             }
             if (matData.materialId >= 1 && matData.materialId <= 9) {
-              if (matData.materialId > 5) {
-                meshData.collisionIntention = 0;
+              meshData.collisionIntention = 0;
+              if (matData.materialId <= 5) {
+                meshData.collisionIntention |= CollisionIntention.PHYSICAL_SEE_THROUGH.getId(); // players and npcs cant move but see through
               }
-              meshData.collisionIntention |= CollisionIntention.WALK.getId();
+              meshData.collisionIntention |= CollisionIntention.WALK.getId(); // npcs cannot walk through
             }
             meshes.add(meshData);
           }

@@ -8,7 +8,8 @@ public enum CollisionIntention {
   WALK(1 << 3), // Walk/NoWalk obstacles
   DOOR(1 << 4), // Doors which have a state opened/closed
   EVENT(1 << 5), // Appear on event only
-  MOVEABLE(1 << 6); // Ships, shugo boxes
+  MOVEABLE(1 << 6), // Ships, shugo boxes
+  PHYSICAL_SEE_THROUGH(1 << 7);
 
   private final short id;
 
