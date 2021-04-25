@@ -3,6 +3,7 @@ package com.aionemu.geobuilder.loaders;
 import com.aionemu.geobuilder.entries.BrushEntry;
 import com.aionemu.geobuilder.entries.EntryType;
 import com.aionemu.geobuilder.meshData.BrushLstMeshData;
+import com.aionemu.geobuilder.utils.PathSanitizer;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -38,8 +39,8 @@ public class BrushLstLoader {
     for (int i = 0; i < meshInfoCount; i++) {
       brushLst.position(brushLst.position() + 4);
       brushLst.get(fileNameBytes);
-      String fileName = new String(fileNameBytes);
-      meshData.meshFileNames.add(fileName.toLowerCase().replace('\\', '/').trim());
+      String fileName = PathSanitizer.sanitize(new String(fileNameBytes));
+      meshData.meshFileNames.add(fileName);
       brushLst.position(brushLst.position() + 4);
 
       // bounding box

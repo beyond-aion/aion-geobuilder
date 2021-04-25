@@ -646,10 +646,14 @@ public class AionLevelsProcessor {
             loaderState2.traverseNodes(meshes2);
             String doorNameSecondaryState = name + "_state2";
             if (meshes2.size() > 0 && availableMeshes.putIfAbsent(doorNameSecondaryState, meshes2) == null) {
+              if (BrushLstLoader.EVENT_MESHES.contains(name))
+                meshes2.forEach(mesh -> mesh.collisionIntention |= CollisionIntention.EVENT.getId());
               processedCgfs.add(doorNameSecondaryState);
               totalMeshes.incrementAndGet();
             }
           }
+          if (BrushLstLoader.EVENT_MESHES.contains(name))
+            meshes.forEach(mesh -> mesh.collisionIntention |= CollisionIntention.EVENT.getId());
         } else {
           emptyCgfs.add(name);
         }
@@ -681,9 +685,6 @@ public class AionLevelsProcessor {
           stream.writeShort(face.v2);
         }
         stream.writeByte(mesh.materialId);
-        if (BrushLstLoader.EVENT_MESHES.contains(path)) {
-          mesh.collisionIntention |= CollisionIntention.EVENT.getId();
-        }
         stream.writeByte(mesh.collisionIntention);
       }
     } catch (IOException e) {

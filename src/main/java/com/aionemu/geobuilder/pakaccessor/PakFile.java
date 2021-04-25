@@ -1,5 +1,7 @@
 package com.aionemu.geobuilder.pakaccessor;
 
+import com.aionemu.geobuilder.utils.PathSanitizer;
+
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -35,7 +37,7 @@ public class PakFile implements AutoCloseable {
     String prefix = "";
     if (basePath != null) {
       prefix = pakFile.getParentFile().getCanonicalPath().substring(basePath.getCanonicalPath().length());
-      prefix = prefix.replace('\\', '/').toLowerCase();
+      prefix = PathSanitizer.sanitize(prefix);
       if (prefix.startsWith("/"))
         prefix = prefix.substring(1);
       if (!prefix.endsWith("/"))
@@ -76,7 +78,7 @@ public class PakFile implements AutoCloseable {
           }
 
           String fileName = new String(pakFileHeader.fileNameBytes);
-          filesMap.put(prefix + fileName.toLowerCase().replace('\\', '/').trim(), pakFileHeader);
+          filesMap.put(prefix + PathSanitizer.sanitize(fileName), pakFileHeader);
           pakBlocksSet.add(pakFileHeader);
           break;
         case PAK_SIGNATURE2_DIR:

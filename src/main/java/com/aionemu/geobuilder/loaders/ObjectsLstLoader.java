@@ -2,6 +2,7 @@ package com.aionemu.geobuilder.loaders;
 
 import com.aionemu.geobuilder.entries.ObjectEntry;
 import com.aionemu.geobuilder.meshData.ObjectMeshData;
+import com.aionemu.geobuilder.utils.PathSanitizer;
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.input.SAXBuilder;
@@ -27,7 +28,7 @@ public class ObjectsLstLoader {
 
     objectMeshData.meshFiles = new ArrayList<>(vegetation.size());
     for (Element element : vegetation) {
-      objectMeshData.meshFiles.add(element.getAttributeValue("FileName").toLowerCase().replace('\\', '/').trim());
+      objectMeshData.meshFiles.add(PathSanitizer.sanitize(element.getAttributeValue("FileName")));
     }
     int w = Integer.parseInt(rootNode.getChild("LevelInfo").getAttributeValue("HeightmapXSize"));
     int h = Integer.parseInt(rootNode.getChild("LevelInfo").getAttributeValue("HeightmapYSize"));

@@ -5,6 +5,7 @@ import com.aionemu.geobuilder.entries.DoorEntry;
 import com.aionemu.geobuilder.entries.EntityClass;
 import com.aionemu.geobuilder.entries.EntityEntry;
 import com.aionemu.geobuilder.entries.HouseEntry;
+import com.aionemu.geobuilder.utils.PathSanitizer;
 import com.aionemu.geobuilder.utils.Vector3;
 import org.jdom2.Document;
 import org.jdom2.Element;
@@ -67,7 +68,7 @@ public class EntityLoader {
           }
           entry.scale = scale;
           entry2.scale = entry.scale;
-          String mesh = prop.getAttributeValue("object_AnimatedModel").toLowerCase().replace('\\', '/').trim();
+          String mesh = PathSanitizer.sanitize(prop.getAttributeValue("object_AnimatedModel"));
           entry.mesh = mesh;
           entry2.mesh = mesh;
           entry2.suffix = "_state2";
@@ -122,7 +123,7 @@ public class EntityLoader {
             scale.z = Float.parseFloat(scaleValues[2]);
           }
           entry.scale = scale;
-          entry.mesh = prop.getAttributeValue("fileLadderCGF").toLowerCase().replace('\\', '/').trim();
+          entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("fileLadderCGF"));
           entry.entityClass = EntityClass.PLACEABLE;
           entry.type = EntryType.PLACEABLE;
           entityEntries.add(entry);
@@ -135,7 +136,7 @@ public class EntityLoader {
         if (prop != null && prop.getAttribute("object_Model") != null && !prop.getAttributeValue("object_Model").isEmpty() &&
             !prop.getAttributeValue("object_Model").endsWith(".saf")) {
           EntityEntry entry = new EntityEntry();
-          entry.mesh = prop.getAttributeValue("object_Model").toLowerCase().replace('\\', '/').trim();
+          entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("object_Model"));
           if (entry.mesh.toLowerCase().endsWith(".cga")) {
             // TODO: check if there are cgas we should not ignore.
             continue;
@@ -223,7 +224,7 @@ public class EntityLoader {
           entry.level = Integer.parseInt(prop.getAttributeValue("Level"));
           entry.startLevel = Integer.parseInt(prop.getAttributeValue("StartLevel"));
           entry.townId = Integer.parseInt(prop.getAttributeValue("TownID"));
-          entry.mesh = prop.getAttributeValue("object_Model").toLowerCase().replace('\\', '/').trim();
+          entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("object_Model"));
           entry.entityClass = EntityClass.TOWN_OBJECT;
           entry.type = EntryType.TOWN;
           entityEntries.add(entry);
@@ -290,8 +291,7 @@ public class EntityLoader {
             Element land = partsInfo.getChild("Land");
             if (land != null) {
               if (land.getAttribute("housingobjFence") != null) {
-                String val = land.getAttributeValue("housingobjFence").toLowerCase().replace('\\', '/').trim();
-                ;
+                String val = PathSanitizer.sanitize(land.getAttributeValue("housingobjFence"));
                 if (!val.isEmpty()) {
                   entry.meshes.add(val);
                   if (!houseEntityFileNames.contains(val)) {
@@ -303,8 +303,7 @@ public class EntityLoader {
               }
 
               if (land.getAttribute("housingobjGarden") != null) {
-                String val = land.getAttributeValue("housingobjGarden").toLowerCase().replace('\\', '/').trim();
-                ;
+                String val = PathSanitizer.sanitize(land.getAttributeValue("housingobjGarden"));
                 if (!val.isEmpty()) {
                   entry.meshes.add(val);
                   if (!houseEntityFileNames.contains(val)) {
@@ -341,8 +340,7 @@ public class EntityLoader {
                 }
               }
               if (build.getAttribute("housingobjDoor") != null) {
-                String val = build.getAttributeValue("housingobjDoor").toLowerCase().replace('\\', '/').trim();
-                ;
+                String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjDoor"));
                 if (!val.isEmpty()) {
                   entry.mesh = val;
                   entry.meshes.add(val);
@@ -355,8 +353,7 @@ public class EntityLoader {
               }
 
               if (build.getAttribute("housingobjFrame") != null) {
-                String val = build.getAttributeValue("housingobjFrame").toLowerCase().replace('\\', '/').trim();
-                ;
+                String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjFrame"));
                 if (!val.isEmpty()) {
                   entry.meshes.add(val);
                   if (!houseEntityFileNames.contains(val)) {
@@ -368,8 +365,7 @@ public class EntityLoader {
               }
 
               if (build.getAttribute("housingobjOutWall") != null) {
-                String val = build.getAttributeValue("housingobjOutWall").toLowerCase().replace('\\', '/').trim();
-                ;
+                String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjOutWall"));
                 if (!val.isEmpty()) {
                   entry.meshes.add(val);
                   if (!houseEntityFileNames.contains(val)) {
@@ -381,8 +377,7 @@ public class EntityLoader {
               }
 
               if (build.getAttribute("housingobjRoof") != null) {
-                String val = build.getAttributeValue("housingobjRoof").toLowerCase().replace('\\', '/').trim();
-                ;
+                String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjRoof"));
                 if (!val.isEmpty()) {
                   entry.meshes.add(val);
                   if (!houseEntityFileNames.contains(val)) {
@@ -395,8 +390,7 @@ public class EntityLoader {
 
               for (int i = 1; i < 6; i++) {
                 if (build.getAttribute("housingobjInFloor" + i) != null) {
-                  String val = build.getAttributeValue("housingobjInFloor" + i).toLowerCase().replace('\\', '/').trim();
-                  ;
+                  String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjInFloor" + i));
                   if (!val.isEmpty()) {
                     entry.meshes.add(val);
                     if (!houseEntityFileNames.contains(val)) {
@@ -408,8 +402,7 @@ public class EntityLoader {
                 }
 
                 if (build.getAttribute("housingobjInWall" + i) != null) {
-                  String val = build.getAttributeValue("housingobjInWall" + i).toLowerCase().replace('\\', '/').trim();
-                  ;
+                  String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjInWall" + i));
                   if (!val.isEmpty()) {
                     entry.meshes.add(val);
                     if (!houseEntityFileNames.contains(val)) {
