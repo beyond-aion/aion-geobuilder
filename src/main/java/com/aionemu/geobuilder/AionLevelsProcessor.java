@@ -99,7 +99,7 @@ public class AionLevelsProcessor {
       List<LevelData> levels = findLevelsToProcess();
       if (!levels.isEmpty()) {
         if (!outPath.mkdirs())
-          Files.list(outPath.toPath()).filter(p -> p.toString().endsWith(".geo") || p.toString().equals("geo.mesh")).forEach(p -> p.toFile().delete());
+          Files.list(outPath.toPath()).filter(p -> p.toString().endsWith(".geo") || p.toString().endsWith(".mesh")).forEach(p -> p.toFile().delete());
 
         log.info("Generating available house addresses …");
         Map<String, Integer> houseAdresses = generateHouseAddressList();
@@ -351,16 +351,23 @@ public class AionLevelsProcessor {
     int processedCount = processedCgfs.size() + missingCgfs.size();
     if (processedCount != totalMeshes.get()) // should only happen on parsing/processing error
       log.warning("Only " + processedCount + " of " + totalMeshes + " meshes have been successfully processed!");
-    log.info("Writing " + availableMeshes.size() + " of " + totalMeshes + " meshes (skipping " + emptyCgfs.size() + " empty and " + missingCgfs.size() + " missing ones) …");
-    File meshFile = new File(outputFolder, "geo.mesh");
+    log.info("Found " + availableMeshes.size() + " valid meshes of " + totalMeshes + " total (skipped " + emptyCgfs.size() + " empty and " + missingCgfs.size() + " missing ones)");
+
+    Map<List<MeshData>, String> uniqueMeshes = availableMeshes.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey()) // sort to generate .mesh files with deterministic, comparable hashes
+        .collect(Collectors.groupingBy(Map.Entry::getValue, LinkedHashMap::new, Collectors.mapping(Map.Entry::getKey, Collectors.joining("|"))));
+    int duplicateCount = availableMeshes.size() - uniqueMeshes.size();
+    log.info("Writing " + uniqueMeshes.size() + " unique meshes (" + duplicateCount + " duplicates have been merged) …");
+
+    File meshFile = new File(outputFolder, "models.mesh");
     try (DataOutputStream stream = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(meshFile)))) {
-      availableMeshes.entrySet().stream()
-          .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER)) // sorted, so the generated .mesh file always has the same hash
-          .forEach(e -> writeMeshes(e.getKey(), e.getValue(), stream));
+      uniqueMeshes.forEach((data, paths) -> writeMeshes(paths, data, stream));
     }
     log.info("Created " + meshFile.getCanonicalPath());
-    if (!missingCgfs.isEmpty())
+    if (!missingCgfs.isEmpty()) {
+      missingCgfs.sort(String.CASE_INSENSITIVE_ORDER);
       log.warning(missingCgfs.size() + " missing CGFs: " + missingCgfs);
+    }
   }
 
   private void createGeoFiles(File outputFolder, List<LevelData> levels) throws IOException {
@@ -668,18 +675,26 @@ public class AionLevelsProcessor {
   private void writeMeshes(String path, List<MeshData> data, DataOutputStream stream) {
     try {
       byte[] nameBytes = path.getBytes(StandardCharsets.US_ASCII);
+      if (nameBytes.length > 0xFFFF)
+        throw new IOException("Data doesn't fit in short (nameBytes.length = " + nameBytes.length + ")");
       stream.writeShort(nameBytes.length);
       stream.write(nameBytes);
-      stream.writeShort(data.size());
+      if (data.size() > 0xFF)
+        throw new IOException("Data doesn't fit in byte (data.size() = " + data.size() + ")");
+      stream.writeByte(data.size());
       for (MeshData mesh : data) {
+        if (mesh.vertices.size() > 0xFFFF)
+          throw new IOException("Data doesn't fit in short (mesh.vertices.size() = " + mesh.vertices.size() + ")");
         stream.writeShort(mesh.vertices.size());
         for (Vector3 vec : mesh.vertices) {
           stream.writeFloat(vec.x);
           stream.writeFloat(vec.y);
           stream.writeFloat(vec.z);
         }
-        stream.writeInt(mesh.indices.size() * 3);
-        for (MeshFace face : mesh.indices) {
+        if (mesh.faces.size() > 0xFFFF)
+          throw new IOException("Data doesn't fit in short (mesh.faces.size() = " + mesh.faces.size() + ")");
+        stream.writeShort(mesh.faces.size());
+        for (MeshFace face : mesh.faces) {
           stream.writeShort(face.v0);
           stream.writeShort(face.v1);
           stream.writeShort(face.v2);

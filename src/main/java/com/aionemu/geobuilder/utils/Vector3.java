@@ -1,5 +1,7 @@
 package com.aionemu.geobuilder.utils;
 
+import java.util.Objects;
+
 public class Vector3 {
 
   public float x, y, z;
@@ -13,10 +15,22 @@ public class Vector3 {
   public Vector3() {}
 
   @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    Vector3 vector3 = (Vector3) o;
+    return Float.compare(vector3.x, x) == 0 && Float.compare(vector3.y, y) == 0 && Float.compare(vector3.z, z) == 0;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(x, y, z);
+  }
+
+  @Override
   public String toString() {
     return "{X:" + x + ", Y:" + y + ", Z:" + z + "}";
   }
-
 
   public static Vector3 transform(Vector3 position, Matrix4f matrix) {
     Vector3 result = new Vector3();

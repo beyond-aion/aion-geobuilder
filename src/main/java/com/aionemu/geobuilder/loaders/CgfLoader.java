@@ -645,7 +645,7 @@ public class CgfLoader {
         MeshData meshData = new MeshData();
         meshData.vertices = new ArrayList<>(entity.mesh.vertices.size());
         meshData.vertices = transform(entity.mesh.vertices, matrix);
-        meshData.indices = entity.mesh.indices;
+        meshData.faces = entity.mesh.indices;
         meshes.add(meshData);
       }
     }
@@ -689,7 +689,7 @@ public class CgfLoader {
             MeshData meshData = new MeshData();
             meshData.vertices = new ArrayList<>(node.mesh.vertices.size());
             meshData.vertices = transform(node.mesh.vertices, mat);
-            meshData.indices = face.getValue();
+            meshData.faces = face.getValue();
 
             //isMaterialIntention(materialData.get(materialIdx.get(matIdx)).materialId)
             CgfMaterialData matData = materialData.get(materialIdx.get(face.getKey()));
