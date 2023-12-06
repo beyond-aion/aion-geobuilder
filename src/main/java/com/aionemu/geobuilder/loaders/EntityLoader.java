@@ -19,54 +19,27 @@ import java.util.Map;
 
 public class EntityLoader {
 
-  private List<EntityEntry> entityEntries = new ArrayList<>();
-  private List<String> placeableEntityFileNames = new ArrayList<>();
-  private List<String> basicEntityFileNames = new ArrayList<>();
-  private List<String> townEntityFileNames = new ArrayList<>();
-  private List<String> houseEntityFileNames = new ArrayList<>();
-  private List<String> houseDoorEntityFileNames = new ArrayList<>();
-  private List<String> doorEntityFileNames = new ArrayList<>();
+  private EntityLoader() {
+  }
 
-  public void loadPlaceables(ByteBuffer mission, Map<String, Integer> addresses) throws Exception {
-    clear();
+  public static List<EntityEntry> loadPlaceables(ByteBuffer mission, Map<String, Short> addresses) throws Exception {
     Document document = new SAXBuilder().build(new ByteArrayInputStream(mission.array()));
     Element rootNode = document.getRootElement();
     List<Element> entities = rootNode.getChild("Objects").getChildren("Entity");
+    List<EntityEntry> entityEntries = new ArrayList<>(entities.size());
     for (Element node : entities) {
-      if (node.getAttributeValue("EntityClass").equalsIgnoreCase("Door")) {
+      String entityClass = node.getAttributeValue("EntityClass");
+      if (entityClass.equalsIgnoreCase("Door")) {
         Element prop = node.getChild("Properties");
-        if (prop != null && prop.getAttribute("object_AnimatedModel") != null && !prop.getAttributeValue("object_AnimatedModel").isEmpty()) {
+        if (!prop.getAttributeValue("object_AnimatedModel").isEmpty()) {
           DoorEntry entry = new DoorEntry();
           DoorEntry entry2 = new DoorEntry();
           entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId"));
           entry2.entityId = entry.entityId;
-          entry.name = node.getAttributeValue("Name");
+          loadNameAnglePositionAndScale(node, entry);
           entry2.name = entry.name;
-          Vector3 angle = new Vector3();
-          String angleValue = node.getAttributeValue("Angles");
-          if (angleValue != null) {
-            String[] values = angleValue.split(",");
-            angle.x = Float.parseFloat(values[0]);
-            angle.y = Float.parseFloat(values[1]);
-            angle.z = Float.parseFloat(values[2]);
-          }
-          entry.angle = angle;
           entry2.angle = entry.angle;
-          Vector3 pos = new Vector3();
-          String[] posValues = node.getAttributeValue("Pos").split(",");
-          pos.x = Float.parseFloat(posValues[0]);
-          pos.y = Float.parseFloat(posValues[1]);
-          pos.z = Float.parseFloat(posValues[2]);
-          entry.pos = pos;
           entry2.pos = entry.pos;
-          Vector3 scale = new Vector3(1, 1, 1);
-          if (node.getAttributeValue("Scale") != null) {
-            String[] scaleValues = node.getAttributeValue("Scale").split(",");
-            scale.x = Float.parseFloat(scaleValues[0]);
-            scale.y = Float.parseFloat(scaleValues[1]);
-            scale.z = Float.parseFloat(scaleValues[2]);
-          }
-          entry.scale = scale;
           entry2.scale = entry.scale;
           String mesh = PathSanitizer.sanitize(prop.getAttributeValue("object_AnimatedModel"));
           entry.mesh = mesh;
@@ -78,96 +51,41 @@ public class EntityLoader {
           entry2.type = EntryType.DOOR2;
           entityEntries.add(entry);
           entityEntries.add(entry2);
-          if (!doorEntityFileNames.contains(mesh)) {
-            doorEntityFileNames.add(mesh);
-          }
         }
-      } else if (node.getAttributeValue("EntityClass").equalsIgnoreCase("PlaceableObject")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("AbyssArtifacts")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("AbyssShield")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("AbyssDoor")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("tailoring")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("weapon_craft")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("handiwork")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("armor_craft")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("menuisier")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("alchemy")
-                           || node.getAttributeValue("EntityClass").equalsIgnoreCase("cooking")) {
+      } else if (entityClass.equalsIgnoreCase("PlaceableObject")
+                           || entityClass.equalsIgnoreCase("AbyssArtifacts")
+                           || entityClass.equalsIgnoreCase("AbyssShield")
+                           || entityClass.equalsIgnoreCase("AbyssDoor")
+                           || entityClass.equalsIgnoreCase("tailoring")
+                           || entityClass.equalsIgnoreCase("weapon_craft")
+                           || entityClass.equalsIgnoreCase("handiwork")
+                           || entityClass.equalsIgnoreCase("armor_craft")
+                           || entityClass.equalsIgnoreCase("menuisier")
+                           || entityClass.equalsIgnoreCase("alchemy")
+                           || entityClass.equalsIgnoreCase("cooking")) {
         Element prop = node.getChild("Properties");
-        if (prop != null && prop.getAttribute("fileLadderCGF") != null && !prop.getAttributeValue("fileLadderCGF").isEmpty() &&
-            !prop.getAttributeValue("fileLadderCGF").endsWith(".saf")) {
+        if (!prop.getAttributeValue("fileLadderCGF").isEmpty() && !prop.getAttributeValue("fileLadderCGF").endsWith(".saf")) {
           EntityEntry entry = new EntityEntry();
           entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId")); // static id
-          entry.name = node.getAttributeValue("Name");
-          Vector3 angle = new Vector3();
-          String angleValue = node.getAttributeValue("Angles");
-          if (angleValue != null) {
-            String[] values = angleValue.split(",");
-            angle.x = Float.parseFloat(values[0]);
-            angle.y = Float.parseFloat(values[1]);
-            angle.z = Float.parseFloat(values[2]);
-          }
-          entry.angle = angle;
-          Vector3 pos = new Vector3();
-          String[] posValues = node.getAttributeValue("Pos").split(",");
-          pos.x = Float.parseFloat(posValues[0]);
-          pos.y = Float.parseFloat(posValues[1]);
-          pos.z = Float.parseFloat(posValues[2]);
-          entry.pos = pos;
-
-          Vector3 scale = new Vector3(1, 1, 1);
-          if (node.getAttributeValue("Scale") != null) {
-            String[] scaleValues = node.getAttributeValue("Scale").split(",");
-            scale.x = Float.parseFloat(scaleValues[0]);
-            scale.y = Float.parseFloat(scaleValues[1]);
-            scale.z = Float.parseFloat(scaleValues[2]);
-          }
-          entry.scale = scale;
+          loadNameAnglePositionAndScale(node, entry);
           entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("fileLadderCGF"));
           entry.entityClass = EntityClass.PLACEABLE;
           entry.type = EntryType.PLACEABLE;
           entityEntries.add(entry);
-          if (!placeableEntityFileNames.contains(entry.mesh)) {
-            placeableEntityFileNames.add(entry.mesh);
-          }
         }
-      } else if (node.getAttributeValue("EntityClass").equalsIgnoreCase("BasicEntity")) {
+      } else if (entityClass.equalsIgnoreCase("BasicEntity")) {
         Element prop = node.getChild("Properties");
-        if (prop != null && prop.getAttribute("object_Model") != null && !prop.getAttributeValue("object_Model").isEmpty() &&
-            !prop.getAttributeValue("object_Model").endsWith(".saf")) {
+        if (!prop.getAttributeValue("object_Model").isEmpty() && !prop.getAttributeValue("object_Model").endsWith(".saf")) {
           EntityEntry entry = new EntityEntry();
           entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("object_Model"));
-          if (entry.mesh.toLowerCase().endsWith(".cga")) {
+          if (entry.mesh.endsWith(".cga")) {
             // TODO: check if there are cgas we should not ignore.
             continue;
           }
           entry.entityId = 0; // basic entites have a static id but they are always spawned, so serverside spawning is not needed
-          entry.name = node.getAttributeValue("Name");
-          Vector3 angle = new Vector3();
-          String angleValue = node.getAttributeValue("Angles");
-          if (angleValue != null) {
-            String[] values = angleValue.split(",");
-            angle.x = Float.parseFloat(values[0]);
-            angle.y = Float.parseFloat(values[1]);
-            angle.z = Float.parseFloat(values[2]);
-          }
-          entry.angle = angle;
-          Vector3 pos = new Vector3();
-          String[] posValues = node.getAttributeValue("Pos").split(",");
-          pos.x = Float.parseFloat(posValues[0]);
-          pos.y = Float.parseFloat(posValues[1]);
-          pos.z = Float.parseFloat(posValues[2]);
-          entry.pos = pos;
-
-          Vector3 scale = new Vector3(1, 1, 1);
-          if (node.getAttributeValue("Scale") != null) {
-            String[] scaleValues = node.getAttributeValue("Scale").split(",");
-            scale.x = Float.parseFloat(scaleValues[0]);
-            scale.y = Float.parseFloat(scaleValues[1]);
-            scale.z = Float.parseFloat(scaleValues[2]);
-          }
-          if (node.getAttribute("EventType") != null && !node.getAttributeValue("EventType").isEmpty()) {
-            String eventType = node.getAttributeValue("EventType");
+          loadNameAnglePositionAndScale(node, entry);
+          String eventType = node.getAttributeValue("EventType");
+          if (eventType != null && !eventType.isEmpty()) {
             if (eventType.endsWith("_1")) {
               entry.entityId = 1;
             } else if (eventType.endsWith("_2")) {
@@ -177,50 +95,20 @@ public class EntityLoader {
             } else if (eventType.endsWith("_8")) {
               entry.entityId = 8;
             } else {
-              System.out.println(". . . Unknown Event [" + node.getAttributeValue("EventType") + "]for Basic Entity with entityId: " + entry.entityId);
-              break;
+              throw new Exception("Unknown event type " + eventType + " for Basic Entity " + node.getAttributeValue("EntityId"));
             }
             entry.type = EntryType.EVENT;
             BrushLstLoader.EVENT_MESHES.add(entry.mesh);
           }
-          entry.scale = scale;
           entry.entityClass = EntityClass.BASIC;
           entityEntries.add(entry);
-          if (!basicEntityFileNames.contains(entry.mesh)) {
-            basicEntityFileNames.add(entry.mesh);
-          }
         }
-      } else if (node.getAttributeValue("EntityClass").equalsIgnoreCase("TownObject")) {
+      } else if (entityClass.equalsIgnoreCase("TownObject")) {
         Element prop = node.getChild("Properties");
-        if (prop != null && prop.getAttribute("object_Model") != null && !prop.getAttributeValue("object_Model").isEmpty() &&
-            !prop.getAttributeValue("object_Model").endsWith(".saf")) {
+        if (!prop.getAttributeValue("object_Model").isEmpty() && !prop.getAttributeValue("object_Model").endsWith(".saf")) {
           EntityEntry entry = new EntityEntry();
           entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId")); // static id
-          entry.name = node.getAttributeValue("Name");
-          Vector3 angle = new Vector3();
-          String angleValue = node.getAttributeValue("Angles");
-          if (angleValue != null) {
-            String[] values = angleValue.split(",");
-            angle.x = Float.parseFloat(values[0]);
-            angle.y = Float.parseFloat(values[1]);
-            angle.z = Float.parseFloat(values[2]);
-          }
-          entry.angle = angle;
-          Vector3 pos = new Vector3();
-          String[] posValues = node.getAttributeValue("Pos").split(",");
-          pos.x = Float.parseFloat(posValues[0]);
-          pos.y = Float.parseFloat(posValues[1]);
-          pos.z = Float.parseFloat(posValues[2]);
-          entry.pos = pos;
-
-          Vector3 scale = new Vector3(1, 1, 1);
-          if (node.getAttributeValue("Scale") != null) {
-            String[] scaleValues = node.getAttributeValue("Scale").split(",");
-            scale.x = Float.parseFloat(scaleValues[0]);
-            scale.y = Float.parseFloat(scaleValues[1]);
-            scale.z = Float.parseFloat(scaleValues[2]);
-          }
-          entry.scale = scale;
+          loadNameAnglePositionAndScale(node, entry);
           entry.level = Integer.parseInt(prop.getAttributeValue("Level"));
           entry.startLevel = Integer.parseInt(prop.getAttributeValue("StartLevel"));
           entry.townId = Integer.parseInt(prop.getAttributeValue("TownID"));
@@ -228,9 +116,6 @@ public class EntityLoader {
           entry.entityClass = EntityClass.TOWN_OBJECT;
           entry.type = EntryType.TOWN;
           entityEntries.add(entry);
-          if (!townEntityFileNames.contains(entry.mesh)) {
-            townEntityFileNames.add(entry.mesh);
-          }
           for (int i = entry.startLevel; i <= 5; i++) {
             EntityEntry entry2 = new EntityEntry();
             entry2.mesh = entry.mesh.replace("01.cgf", "0" + i + ".cgf");
@@ -247,76 +132,36 @@ public class EntityLoader {
             entry2.startLevel = entry.startLevel;
             entry2.townId = entry.townId;
             entityEntries.add(entry2);
-            if (!townEntityFileNames.contains(entry2.mesh)) {
-              townEntityFileNames.add(entry2.mesh);
-            }
           }
         }
-      } else if (node.getAttributeValue("EntityClass").equalsIgnoreCase("HousingBuilding")) {
+      } else if (entityClass.equalsIgnoreCase("HousingBuilding")) {
         Element prop = node.getChild("Properties");
         if (prop != null) {
           HouseEntry entry = new HouseEntry();
           entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId")); // static id
-          entry.name = node.getAttributeValue("Name");
-          Vector3 angle = new Vector3();
-          String angleValue = node.getAttributeValue("Angles");
-          if (angleValue != null) {
-            String[] values = angleValue.split(",");
-            angle.x = Float.parseFloat(values[0]);
-            angle.y = Float.parseFloat(values[1]);
-            angle.z = Float.parseFloat(values[2]);
-          }
-          entry.angle = angle;
-          Vector3 pos = new Vector3();
-          String[] posValues = node.getAttributeValue("Pos").split(",");
-          pos.x = Float.parseFloat(posValues[0]);
-          pos.y = Float.parseFloat(posValues[1]);
-          pos.z = Float.parseFloat(posValues[2]);
-          entry.pos = pos;
-
-          Vector3 scale = new Vector3(1, 1, 1);
-          if (node.getAttributeValue("Scale") != null) {
-            String[] scaleValues = node.getAttributeValue("Scale").split(",");
-            scale.x = Float.parseFloat(scaleValues[0]);
-            scale.y = Float.parseFloat(scaleValues[1]);
-            scale.z = Float.parseFloat(scaleValues[2]);
-          }
-          entry.scale = scale;
+          loadNameAnglePositionAndScale(node, entry);
           entry.entityClass = EntityClass.HOUSE;
-          entry.address = addresses.getOrDefault(prop.getAttributeValue("address_Address"), -1);
+          String addressName = prop.getAttributeValue("address_Address");
+          entry.address = addressName.isEmpty() ? -1 : addresses.get(addressName);
 
           Element partsInfo = prop.getChild("PartsInfo");
           if (partsInfo != null) {
             Element build = partsInfo.getChild("Build");
             Element land = partsInfo.getChild("Land");
             if (land != null) {
-              if (land.getAttribute("housingobjFence") != null) {
-                String val = PathSanitizer.sanitize(land.getAttributeValue("housingobjFence"));
-                if (!val.isEmpty()) {
-                  entry.meshes.add(val);
-                  if (!houseEntityFileNames.contains(val)) {
-                    houseEntityFileNames.add(val);
-                  }
-                }
-              } else {
-                System.out.println("house has no fence: " + entry.entityId);
+              String housingobjFence = land.getAttributeValue("housingobjFence");
+              if (!housingobjFence.isEmpty()) {
+                entry.meshes.add(PathSanitizer.sanitize(housingobjFence));
               }
 
-              if (land.getAttribute("housingobjGarden") != null) {
-                String val = PathSanitizer.sanitize(land.getAttributeValue("housingobjGarden"));
-                if (!val.isEmpty()) {
-                  entry.meshes.add(val);
-                  if (!houseEntityFileNames.contains(val)) {
-                    houseEntityFileNames.add(val);
-                  }
-                }
-              } else {
-                System.out.println("house has no garden: " + entry.entityId);
+              String housingobjGarden = land.getAttributeValue("housingobjGarden");
+              if (!housingobjGarden.isEmpty()) {
+                entry.meshes.add(PathSanitizer.sanitize(housingobjGarden));
               }
             }
 
             if (build != null) {
-              if (prop.getChild("BuildInfo") != null && prop.getChild("BuildInfo").getAttribute("vectorBuild_Offset") != null) {
+              if (prop.getChild("BuildInfo").getAttribute("vectorBuild_Offset") != null) {
                 String offsetString = prop.getChild("BuildInfo").getAttributeValue("vectorBuild_Offset");
                 if (!offsetString.isEmpty()) {
                   String[] offsetSplitted = offsetString.split(",");
@@ -339,78 +184,37 @@ public class EntityLoader {
                   }
                 }
               }
-              if (build.getAttribute("housingobjDoor") != null) {
-                String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjDoor"));
-                if (!val.isEmpty()) {
-                  entry.mesh = val;
-                  entry.meshes.add(val);
-                  if (!houseDoorEntityFileNames.contains(val)) {
-                    houseDoorEntityFileNames.add(val);
-                  }
-                } else {
-                  System.out.println("house has no door: " + entry.entityId);
-                }
+              String housingobjDoor = build.getAttributeValue("housingobjDoor");
+              if (!housingobjDoor.isEmpty()) {
+                entry.entityClass = EntityClass.HOUSE_DOOR;
+                entry.mesh = PathSanitizer.sanitize(housingobjDoor);
+                entry.meshes.add(entry.mesh);
               }
 
-              if (build.getAttribute("housingobjFrame") != null) {
-                String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjFrame"));
-                if (!val.isEmpty()) {
-                  entry.meshes.add(val);
-                  if (!houseEntityFileNames.contains(val)) {
-                    houseEntityFileNames.add(val);
-                  }
-                }
-              } else {
-                System.out.println("house has no frame: " + entry.entityId);
+              String housingobjFrame = build.getAttributeValue("housingobjFrame");
+              if (!housingobjFrame.isEmpty()) {
+                entry.meshes.add(PathSanitizer.sanitize(housingobjFrame));
               }
 
-              if (build.getAttribute("housingobjOutWall") != null) {
-                String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjOutWall"));
-                if (!val.isEmpty()) {
-                  entry.meshes.add(val);
-                  if (!houseEntityFileNames.contains(val)) {
-                    houseEntityFileNames.add(val);
-                  }
-                }
-              } else {
-                System.out.println("house has no out wall: " + entry.entityId);
+              String housingobjOutWall = build.getAttributeValue("housingobjOutWall");
+              if (!housingobjOutWall.isEmpty()) {
+                entry.meshes.add(PathSanitizer.sanitize(housingobjOutWall));
               }
 
-              if (build.getAttribute("housingobjRoof") != null) {
-                String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjRoof"));
-                if (!val.isEmpty()) {
-                  entry.meshes.add(val);
-                  if (!houseEntityFileNames.contains(val)) {
-                    houseEntityFileNames.add(val);
-                  }
-                }
-              } else {
-                System.out.println("house has no roof: " + entry.entityId);
+              String housingobjRoof = build.getAttributeValue("housingobjRoof");
+              if (!housingobjRoof.isEmpty()) {
+                entry.meshes.add(PathSanitizer.sanitize(housingobjRoof));
               }
 
-              for (int i = 1; i < 6; i++) {
-                if (build.getAttribute("housingobjInFloor" + i) != null) {
-                  String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjInFloor" + i));
-                  if (!val.isEmpty()) {
-                    entry.meshes.add(val);
-                    if (!houseEntityFileNames.contains(val)) {
-                                            houseEntityFileNames.add(val);
-                    }
-                  }
-                } else {
-                  System.out.println("house has no in floor" + i + ": " + entry.entityId);
+              for (int i = 1; i <= 5; i++) {
+                String housingobjInFloor = build.getAttributeValue("housingobjInFloor" + i);
+                if (!housingobjInFloor.isEmpty()) {
+                  entry.meshes.add(PathSanitizer.sanitize(housingobjInFloor));
                 }
 
-                if (build.getAttribute("housingobjInWall" + i) != null) {
-                  String val = PathSanitizer.sanitize(build.getAttributeValue("housingobjInWall" + i));
-                  if (!val.isEmpty()) {
-                    entry.meshes.add(val);
-                    if (!houseEntityFileNames.contains(val)) {
-                                            houseEntityFileNames.add(val);
-                    }
-                  }
-                } else {
-                  System.out.println("house has no in wall" + i + ": " + entry.entityId);
+                String housingobjInWall = build.getAttributeValue("housingobjInWall" + i);
+                if (!housingobjInWall.isEmpty()) {
+                  entry.meshes.add(PathSanitizer.sanitize(housingobjInWall));
                 }
               }
             }
@@ -420,38 +224,32 @@ public class EntityLoader {
 
       }
     }
+    return entityEntries;
   }
 
-  public void clear() {
-    entityEntries.clear();
-    placeableEntityFileNames.clear();
-    basicEntityFileNames.clear();
-    townEntityFileNames.clear();
-    houseEntityFileNames.clear();
-    doorEntityFileNames.clear();
-  }
+  private static void loadNameAnglePositionAndScale(Element node, EntityEntry entry) {
+    entry.name = node.getAttributeValue("Name");
+    entry.angle = new Vector3();
+    String angles = node.getAttributeValue("Angles");
+    if (angles != null) {
+      String[] values = angles.split(",");
+      entry.angle.x = Float.parseFloat(values[0]);
+      entry.angle.y = Float.parseFloat(values[1]);
+      entry.angle.z = Float.parseFloat(values[2]);
+    }
+    entry.pos = new Vector3();
+    String[] posValues = node.getAttributeValue("Pos").split(",");
+    entry.pos.x = Float.parseFloat(posValues[0]);
+    entry.pos.y = Float.parseFloat(posValues[1]);
+    entry.pos.z = Float.parseFloat(posValues[2]);
 
-  public List<String> getEntityFileNames(EntityClass entityClass) {
-    switch (entityClass) {
-      case BASIC:
-        return (List<String>) ((ArrayList) basicEntityFileNames).clone();
-      case PLACEABLE:
-        return (List<String>) ((ArrayList) placeableEntityFileNames).clone();
-      case TOWN_OBJECT:
-        return (List<String>) ((ArrayList) townEntityFileNames).clone();
-      case HOUSE:
-        return (List<String>) ((ArrayList) houseEntityFileNames).clone();
-      case HOUSE_DOOR:
-        return (List<String>) ((ArrayList) houseDoorEntityFileNames).clone();
-      case DOOR:
-        return (List<String>) ((ArrayList) doorEntityFileNames).clone();
-      default:
-        return null;
+    entry.scale = new Vector3(1, 1, 1);
+    String scales = node.getAttributeValue("Scale");
+    if (scales != null) {
+      String[] scaleValues = scales.split(",");
+      entry.scale.x = Float.parseFloat(scaleValues[0]);
+      entry.scale.y = Float.parseFloat(scaleValues[1]);
+      entry.scale.z = Float.parseFloat(scaleValues[2]);
     }
   }
-
-  public List<EntityEntry> getEntityEntries() {
-    return (List<EntityEntry>) ((ArrayList<EntityEntry>) entityEntries).clone();
-  }
-
 }

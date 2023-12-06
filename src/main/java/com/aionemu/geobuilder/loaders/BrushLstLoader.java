@@ -8,20 +8,25 @@ import com.aionemu.geobuilder.utils.PathSanitizer;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class BrushLstLoader {
 
   public static final Set<String> EVENT_MESHES = ConcurrentHashMap.newKeySet();
+  private static final byte[] SIGNATURE = "CRY".getBytes();
+
+  private BrushLstLoader() {
+  }
 
   public static BrushLstMeshData load(ByteBuffer brushLst) throws IOException {
     BrushLstMeshData meshData = new BrushLstMeshData();
 
-    byte[] signature = new byte[3];
+    byte[] signature = new byte[SIGNATURE.length];
     brushLst.get(signature);
-    if (signature[0] != 0x43 || signature[1] != 0x52 || signature[2] != 0x59) {
-      throw new IOException("[BrushLstLoader] Wrong signature");
+    if (!Arrays.equals(SIGNATURE, signature)) {
+      throw new IOException("[BrushLstLoader] Wrong signature: " + new String(signature));
     }
 
     brushLst.getInt(); //dw1
@@ -55,13 +60,14 @@ public class BrushLstLoader {
     int meshDataCount = brushLst.getInt();
     meshData.brushEntries = new ArrayList<>(meshDataCount);
     for (int i = 0; i < meshDataCount; i++) {
+      BrushEntry entry = new BrushEntry();
       brushLst.position(brushLst.position() + 4 * 2);
-      int meshIdx = brushLst.getInt();
+      entry.meshIndex = brushLst.getInt();
       brushLst.position(brushLst.position() + 4 * 3);
 
-      float[] meshMatrix = new float[3 * 4];
-      for (int j = 0; j < meshMatrix.length; j++) {
-        meshMatrix[j] = brushLst.getFloat();
+      entry.matrix = new float[3 * 4];
+      for (int j = 0; j < entry.matrix.length; j++) {
+        entry.matrix[j] = brushLst.getFloat();
       }
 
       brushLst.get(); // 100/200
@@ -83,21 +89,13 @@ public class BrushLstLoader {
       if (eventType < 0 || eventType > 0xFF) {
         throw new IOException("Out of range event type " + eventType);
       }
-      BrushEntry entry = new BrushEntry();
       if (eventType > 0) {
         entry.eventType = (byte) eventType;
         entry.type = EntryType.EVENT;
-        EVENT_MESHES.add(meshData.meshFileNames.get(meshIdx));
+        EVENT_MESHES.add(meshData.meshFileNames.get(entry.meshIndex));
       }
-      entry.meshIdx = meshIdx;
-      entry.matrix = meshMatrix;
       meshData.brushEntries.add(entry);
-
-      brushLst.getInt(); // 3 unk
-      if (meshDataBlockSize > 16)
-        brushLst.getInt(); // 0 unk
-      brushLst.position(brushLst.position() + 4 * (meshDataBlockSize - 17));
-
+      brushLst.position(brushLst.position() + 4 * (meshDataBlockSize - 15));
     }
     return meshData;
   }

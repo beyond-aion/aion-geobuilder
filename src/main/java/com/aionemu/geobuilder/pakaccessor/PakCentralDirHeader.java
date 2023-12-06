@@ -25,30 +25,30 @@ class PakCentralDirHeader extends PakBlock {
   int extFileAttr;
   int localHeaderOffset;
 
-  byte fileNameBytes[];
+  byte[] fileNameBytes;
 
-  public void read(ByteBuffer stream) {
-    createVersion = stream.get();
-    createSystem = stream.get();
-    extractVersion = stream.get();
-    extractSystem = stream.get();
-    flags = stream.getShort();
-    compType = stream.getShort();
-    time = stream.getShort();
-    date = stream.getShort();
-    crc = stream.getInt();
-    compressedSz = stream.getInt();
-    uncompressedSz = stream.getInt();
-    fileNameSz = stream.getShort();
-    extraFieldsSz = stream.getShort();
-    commentSz = stream.getShort();
-    diskNumStart = stream.getShort();
-    intFileAttr = stream.getShort();
-    extFileAttr = stream.getInt();
-    localHeaderOffset = stream.getInt();
+  public void read(ByteBuffer buffer) {
+    createVersion = buffer.get();
+    createSystem = buffer.get();
+    extractVersion = buffer.get();
+    extractSystem = buffer.get();
+    flags = buffer.getShort();
+    compType = buffer.getShort();
+    time = buffer.getShort();
+    date = buffer.getShort();
+    crc = buffer.getInt();
+    compressedSz = buffer.getInt();
+    uncompressedSz = buffer.getInt();
+    fileNameSz = buffer.getShort();
+    extraFieldsSz = buffer.getShort();
+    commentSz = buffer.getShort();
+    diskNumStart = buffer.getShort();
+    intFileAttr = buffer.getShort();
+    extFileAttr = buffer.getInt();
+    localHeaderOffset = buffer.getInt();
 
     fileNameBytes = new byte[fileNameSz];
-    stream.get(fileNameBytes);
+    buffer.get(fileNameBytes);
   }
 
   public void write(DataOutputStream stream) throws IOException {

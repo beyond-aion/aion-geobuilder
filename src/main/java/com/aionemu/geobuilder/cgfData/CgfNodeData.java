@@ -6,7 +6,7 @@ import java.util.List;
 
 public class CgfNodeData {
 
-  public int parentId = -1, chunkId, objectId, materialId, positionControllerId, rotationControllerId, scaleControllerId;
+  public int parentId = -1, chunkId, objectId, positionControllerId, rotationControllerId, scaleControllerId;
   public CgfMeshData mesh;
   public CgfHelperData helper;
   public float[] transform;

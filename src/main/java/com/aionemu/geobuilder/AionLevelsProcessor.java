@@ -5,14 +5,15 @@ import com.aionemu.geobuilder.loaders.BrushLstLoader;
 import com.aionemu.geobuilder.loaders.CgfLoader;
 import com.aionemu.geobuilder.loaders.EntityLoader;
 import com.aionemu.geobuilder.loaders.ObjectsLstLoader;
+import com.aionemu.geobuilder.meshData.CollisionIntention;
 import com.aionemu.geobuilder.meshData.MeshData;
 import com.aionemu.geobuilder.meshData.MeshFace;
 import com.aionemu.geobuilder.pakaccessor.PakFile;
-import com.aionemu.geobuilder.utils.BinaryXmlDecoder;
+import com.aionemu.geobuilder.utils.BinaryXmlParser;
 import com.aionemu.geobuilder.utils.Matrix4f;
 import com.aionemu.geobuilder.utils.Vector3;
 import com.beust.jcommander.Parameter;
-import com.beust.jcommander.converters.FileConverter;
+import com.beust.jcommander.converters.PathConverter;
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.JDOMException;
@@ -22,8 +23,8 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -32,17 +33,17 @@ import java.util.stream.Collectors;
 
 public class AionLevelsProcessor {
 
-  @Parameter(description = "<client path>", converter = FileConverter.class, required = true)
-  protected File clientPath;
+  @Parameter(description = "<client path>", converter = PathConverter.class, required = true)
+  protected Path clientPath;
 
-  @Parameter(names = "-lvl", description = "Level-Id to generate geodata for e.g. 110010000. default: all levels. ", order = 1)
-  protected String levelId = null;
+  @Parameter(names = "-lvl", description = "Limit file generation to given level ID(s) (default: all levels) Example: -lvl 110010000 -lvl 110020000", order = 1)
+  protected Set<String> levelIds;
 
-  @Parameter(names = "-w", description = "Path to server world_maps.xml or client WorldId.xml. default: client WorldId.xml", order = 2)
-  protected File worldIdPath;
+  @Parameter(names = "-w", description = "Path to server world_maps.xml or client WorldId.xml (default: client WorldId.xml)", order = 2)
+  protected Path worldIdPath;
 
   @Parameter(names = "-o", description = "Path to the output folder", order = 3)
-  protected File outPath = new File("./out");
+  protected Path outPath = Path.of("./out");
 
   @Parameter(names = "-v", description = "Activate verbose logging", order = 4)
   protected boolean verbose;
@@ -51,26 +52,26 @@ public class AionLevelsProcessor {
   private static final Set<String> ignoredCgfs = new HashSet<>();
 
   static {
-    System.setProperty("java.util.logging.SimpleFormatter.format", "%1$tT [%4$s] %5$s%6$s%n");
+    System.setProperty("java.util.logging.SimpleFormatter.format", "%1$tT [%4$s] %5$s%6$s");
     log.setUseParentHandlers(false);
     StreamHandler consoleHandler = new StreamHandler(System.out, new SimpleFormatter() {
       @Override
       public String format(LogRecord record) {
-        boolean isTemporaryLine = record.getMessage().endsWith("\r");
         String msg = super.format(record);
-        if (isTemporaryLine) // remove newline (cursor will be at the start and next print will override this message)
-          msg = msg.substring(0, msg.length() - System.lineSeparator().length());
+        boolean isTemporaryLine = msg.endsWith("\r");
+        if (isTemporaryLine) // remove carriage return char temporarily to insert the "Erase in Line" ANSI escape code before it
+          msg = msg.substring(0, msg.length() - 1);
         if (record.getLevel() == Level.SEVERE)
-          return "\u001B[31m" + msg + "\u001b[0m";
-        if (record.getLevel() == Level.WARNING)
-          return "\u001B[33m" + msg + "\u001b[0m";
-        if (record.getLevel().intValue() < Level.INFO.intValue())
-          return "\u001B[37m" + msg + "\u001b[0m";
-        return msg;
+          msg = "\u001B[31m" + msg + "\u001b[0m";
+        else if (record.getLevel() == Level.WARNING)
+          msg = "\u001B[33m" + msg + "\u001b[0m";
+        else if (record.getLevel().intValue() < Level.INFO.intValue())
+          msg = "\u001B[37m" + msg + "\u001b[0m";
+        return isTemporaryLine ? msg + "\033[K\r" : msg + "\033[K" + System.lineSeparator();
       }
     }) {
       @Override
-      public synchronized void publish(LogRecord record) {
+      public void publish(LogRecord record) {
         super.publish(record);
         flush();
       }
@@ -95,20 +96,22 @@ public class AionLevelsProcessor {
     log.setLevel(verbose ? Level.ALL : Level.INFO);
     long time = System.currentTimeMillis();
     try {
-      log.info("Generating available levels list …");
+      log.info("Loading available levels …");
       List<LevelData> levels = findLevelsToProcess();
       if (!levels.isEmpty()) {
-        if (!outPath.mkdirs())
-          Files.list(outPath.toPath()).filter(p -> p.toString().endsWith(".geo") || p.toString().endsWith(".mesh")).forEach(p -> p.toFile().delete());
+        if (Files.isDirectory(outPath))
+          Files.list(outPath).filter(p -> p.toString().endsWith(".geo") || p.toString().endsWith(".mesh")).forEach(p -> p.toFile().delete());
+        else
+          Files.createDirectories(outPath);
 
-        log.info("Generating available house addresses …");
-        Map<String, Integer> houseAdresses = generateHouseAddressList();
+        log.info("Loading available house addresses …");
+        Map<String, Short> houseAdresses = loadHouseAddresses();
 
         log.info("Processing levels …");
         processLevels(levels, houseAdresses);
 
         log.info("Collecting mesh file paths …");
-        List<File> meshPaks = collectMeshFilePaths();
+        List<Path> meshPaks = collectMeshFilePaths();
 
         log.info("Generating mesh file …");
         createMeshes(outPath, meshPaks);
@@ -125,10 +128,9 @@ public class AionLevelsProcessor {
 
   private List<LevelData> findLevelsToProcess() throws JDOMException, IOException {
     // Read world_maps.xml or WorldId.xml and find Levels to process
-    InputStream worldIdFile = worldIdPath == null ? getClientWorldIdFile() : new FileInputStream(worldIdPath);
-    String worldIdXml = worldIdPath == null ? "client WorldId.xml" : worldIdPath.getName();
+    String worldIdXml = worldIdPath == null ? "client WorldId.xml" : worldIdPath.getFileName().toString();
 
-    Path levelsRootFolder = Paths.get(clientPath.getPath(), "Levels");
+    Path levelsRootFolder = clientPath.resolve("Levels");
     Map<String, File> levelsByName = Files.list(levelsRootFolder)
         .map(Path::toFile)
         .filter(file -> file.isDirectory() && !file.getName().equalsIgnoreCase("common"))
@@ -136,7 +138,7 @@ public class AionLevelsProcessor {
     log.fine("Found " + levelsByName.size() + " levels in " + levelsRootFolder);
 
     // read client maps
-    Document document = new SAXBuilder().build(worldIdFile);
+    Document document = worldIdPath == null ? BinaryXmlParser.parse(getClientWorldIdFile()) : new SAXBuilder().build(worldIdPath.toFile());
     Element rootNode = document.getRootElement();
     boolean clientXml = rootNode.getName().equalsIgnoreCase("world_id");
     List<Element> worldIdXmlLevels = clientXml ? rootNode.getChildren("data") : rootNode.getChildren("map");
@@ -144,18 +146,18 @@ public class AionLevelsProcessor {
 
     List<LevelData> levels = new ArrayList<>();
     // buggy client files are normal, only log warning when we generate from server file or -lvl parameter
-    Level logLevel = this.levelId == null && clientXml ? Level.FINE : Level.WARNING;
+    Level logLevel = levelIds == null && clientXml ? Level.FINE : Level.WARNING;
     for (Element element : worldIdXmlLevels) {
       String levelId = element.getAttributeValue("id");
       String levelName = clientXml ? element.getText() : element.getAttributeValue("cName");
       File levelClientFolder = levelsByName.remove(levelName.toLowerCase());
-      if (this.levelId == null || this.levelId.equalsIgnoreCase(levelId)) {
+      if (levelIds == null || levelIds.contains(levelId)) {
         if (levelClientFolder == null) {
           log.log(logLevel, "Ignoring " + levelName + ": Folder missing in " + levelsRootFolder);
         } else {
-          LevelData level = new LevelData(levelId, levelName, levelClientFolder);
-          if (level.hasPak())
-            levels.add(level);
+          Path clientLevelPakFile = Files.find(levelClientFolder.toPath(), 1, (p, attrs) -> attrs.isRegularFile() && p.getFileName().toString().equalsIgnoreCase("level.pak")).findAny().orElse(null);
+          if (clientLevelPakFile != null)
+            levels.add(new LevelData(levelId, levelName, clientLevelPakFile));
           else
             log.log(logLevel, "Ignoring " + levelName + ": Level.pak missing");
         }
@@ -164,18 +166,23 @@ public class AionLevelsProcessor {
     if (!levelsByName.isEmpty()) {
       log.fine(levelsByName.size() + " levels from " + levelsRootFolder + " were not referenced in " + worldIdXml + ": " + levelsByName.values().stream().map(File::getName).sorted(String.CASE_INSENSITIVE_ORDER).collect(Collectors.joining(", ")));
     }
-    String num = this.levelId == null && clientXml ? levels.size() + "" : levels.size() + "/" + worldIdXmlLevels.size();
-    log.info("Found " + num + " processable level" + (levels.size() == 1 ? "" : "s"));
+    if (levels.isEmpty() && levelIds != null && levelIds.size() == 1) {
+      log.info("Level " + levelIds.iterator().next() + " wasn't found or is not processable");
+    } else {
+      String num = levelIds == null && clientXml ? levels.size() + "" : levels.size() + "/" + (levelIds == null ? worldIdXmlLevels.size() : levelIds.size());
+      log.info("Found " + num + " processable level" + (levels.size() == 1 ? "" : "s"));
+    }
     return levels;
   }
 
-  private Map<String, Integer> generateHouseAddressList() throws JDOMException, IOException {
-    Document document = new SAXBuilder().build(getClientHouseAddressFile());
+  private Map<String, Short> loadHouseAddresses() throws IOException {
+    log.info("Loading available house addresses\r");
+    Document document = BinaryXmlParser.parse(getClientHouseAddressFile());
     Element rootNode = document.getRootElement();
-    Map<String, Integer> addressIdsByName = new HashMap<>();
+    Map<String, Short> addressIdsByName = new HashMap<>();
     for (Element address : rootNode.getChildren("client_housing_address")) {
       String name = address.getChildText("name");
-      int id = Integer.parseInt(address.getChildText("id"));
+      short id = Short.parseShort(address.getChildText("id"));
       if (addressIdsByName.putIfAbsent(name, id) != null)
         log.warning("Duplicate house name in client_housing_adress.xml: " + name);
     }
@@ -183,21 +190,19 @@ public class AionLevelsProcessor {
     return addressIdsByName;
   }
 
-  private InputStream getClientWorldIdFile() throws IOException {
-    File worldIdPakFile = new File(clientPath, "Data/World/World.pak");
-    try (PakFile pakFile = PakFile.open(worldIdPakFile)) {
-      return new ByteArrayInputStream(decodeXml(pakFile.unpak("worldid.xml").array()));
+  private ByteBuffer getClientWorldIdFile() throws IOException {
+    try (PakFile pakFile = PakFile.open(clientPath.resolve("Data/World/World.pak"))) {
+      return pakFile.unpak("worldid.xml");
     }
   }
 
-  private InputStream getClientHouseAddressFile() throws IOException {
-    File housePakFile = new File(clientPath, "Data/Housing/Housing.pak");
-    try (PakFile pakFile = PakFile.open(housePakFile)) {
-      return new ByteArrayInputStream(decodeXml(pakFile.unpak("client_housing_address.xml").array()));
+  private ByteBuffer getClientHouseAddressFile() throws IOException {
+    try (PakFile pakFile = PakFile.open(clientPath.resolve("Data/Housing/Housing.pak"))) {
+      return pakFile.unpak("client_housing_address.xml");
     }
   }
 
-  private void processLevels(List<LevelData> levels, Map<String, Integer> houseAddresses) {
+  private void processLevels(List<LevelData> levels, Map<String, Short> houseAddresses) {
     levels.parallelStream().forEach(level -> {
       if (parseLevelPak(level, houseAddresses))
         requiredCgfs.addAll(level.getAllMeshFileNames());
@@ -207,18 +212,21 @@ public class AionLevelsProcessor {
     requiredCgfs.removeAll(ignoredCgfs);
   }
 
-  private boolean parseLevelPak(LevelData level, Map<String, Integer> houseAddresses) {
-    log.fine(level + ": [Level.pak] Extracting data …\r");
-    ByteBuffer brushLst, objectsLst, mission, landMapH32, levelData;
+  private boolean parseLevelPak(LevelData level, Map<String, Short> houseAddresses) {
+    log.info(level + ": Processing " + level.clientLevelPakFile.getFileName() + '\r');
+    ByteBuffer brushLst, objectsLst, mission, landMapH32;
+    Document levelData = null;
     String levelName = level.levelName.toLowerCase();
-    boolean needsBrushLst = levelName.contains("test") || levelName.contains("system_basic") || levelName.endsWith("prison");
+    boolean needsBrushLst = !(levelName.contains("test") || levelName.contains("system_basic") || levelName.endsWith("prison"));
     try (PakFile pakFile = PakFile.open(level.clientLevelPakFile)) {
+      ByteBuffer levelDataXml = pakFile.unpak("leveldata.xml");
+      if (levelDataXml == null)
+        log.warning(level + ": " + level.clientLevelPakFile + " does not contain leveldata.xml");
+      else
+        levelData = new SAXBuilder().build(new ByteArrayInputStream(levelDataXml.array()));
       brushLst = pakFile.unpak("brush.lst");
       if (brushLst == null)
-        log.log(needsBrushLst ? Level.FINE : Level.WARNING, level + ": " + level.clientLevelPakFile + " does not contain brush.lst");
-      levelData = pakFile.unpak("leveldata.xml");
-      if (levelData == null)
-        log.warning(level + ": " + level.clientLevelPakFile + " does not contain leveldata.xml");
+        log.log(needsBrushLst ? Level.WARNING : Level.FINE, level + ": " + level.clientLevelPakFile + " does not contain brush.lst");
       objectsLst = pakFile.unpak("objects.lst");
       if (objectsLst == null)
         log.fine(level + ": " + level.clientLevelPakFile + " does not contain objects.lst");
@@ -247,12 +255,11 @@ public class AionLevelsProcessor {
     return true;
   }
 
-  private byte[] parseTerrainMaterials(ByteBuffer levelData, LevelData level) {
+  private byte[] parseTerrainMaterials(Document levelData, LevelData level) {
     log.fine(level + ": [leveldata.xml] Processing …\r");
     byte[] materialIds = null;
     try {
-      Document document = new SAXBuilder().build(new ByteArrayInputStream(levelData.array()));
-      Element rootNode = document.getRootElement();
+      Element rootNode = levelData.getRootElement();
       List<Element> objects = rootNode.getChildren("SurfaceTypes").get(0).getChildren();
       materialIds = new byte[objects.size()];
       for (int i = 0; i < objects.size(); i++) {
@@ -263,7 +270,7 @@ public class AionLevelsProcessor {
         materialIds[i] = CgfLoader.isMaterialIntention(matId) ? (byte) matId : 0;
       }
     } catch (Exception e) {
-      log.log(Level.SEVERE, level + ": Error parsing leveldata.xml", e);
+      log.log(Level.SEVERE, level + ": Error reading leveldata.xml", e);
     }
     log.fine(level + ": [leveldata.xml] Done");
     return materialIds == null || materialIds.length == 0 ? null : materialIds;
@@ -279,7 +286,7 @@ public class AionLevelsProcessor {
     log.fine(level + ": [brush.lst] Done");
   }
 
-  private void parseObjects(ByteBuffer objects, ByteBuffer levelData, LevelData level) {
+  private void parseObjects(ByteBuffer objects, Document levelData, LevelData level) {
     log.fine(level + ": [objects.lst] Processing …\r");
     try {
       level.objectMeshData = ObjectsLstLoader.loadLevelData(levelData, objects);
@@ -289,13 +296,11 @@ public class AionLevelsProcessor {
     log.fine(level + ": [objects.lst] Done");
   }
 
-  private void parseEntities(ByteBuffer mission, Map<String, Integer> houseAddresses, LevelData level) {
+  private void parseEntities(ByteBuffer mission, Map<String, Short> houseAddresses, LevelData level) {
     log.fine(level + ": [mission_mission0.xml] Processing entities …\r");
     try {
-      EntityLoader entityLoader = new EntityLoader();
-      entityLoader.loadPlaceables(mission, houseAddresses);
-      level.entityEntries = entityLoader.getEntityEntries();
-      requiredDoorCgas.addAll(entityLoader.getEntityFileNames(EntityClass.DOOR));
+      level.entityEntries = EntityLoader.loadPlaceables(mission, houseAddresses);
+      requiredDoorCgas.addAll(level.entityEntries.stream().filter(e -> e.entityClass == EntityClass.DOOR).map(e -> e.mesh).toList());
     } catch (Exception e) {
       log.log(Level.SEVERE, level + ": Error parsing mission_mission0.xml", e);
     }
@@ -303,35 +308,30 @@ public class AionLevelsProcessor {
   }
 
 
-  private List<File> collectMeshFilePaths() throws IOException {
-    List<File> clientMeshFiles = findMeshPaks("/Levels/common", "/Levels/idabpro", "/Objects");
+  private List<Path> collectMeshFilePaths() throws IOException {
+    List<Path> clientMeshFiles = findMeshPaks("Levels/common", "Levels/idabpro", "Objects");
 
     if (clientMeshFiles.isEmpty())
-      log.info("There are no mesh archives in the Aion client.");
+      log.warning("Found no mesh archives in the Aion client");
     else
       log.info("Found " + clientMeshFiles.size() + " mesh archives");
 
     return clientMeshFiles;
   }
 
-  private List<File> findMeshPaks(String... rootFolders) throws IOException {
-    List<File> meshPaks = new ArrayList<>();
+  private List<Path> findMeshPaks(String... rootFolders) throws IOException {
+    List<Path> meshPaks = new ArrayList<>();
     for (String relativeFolderPath : rootFolders) {
-      File folder = new File(clientPath, relativeFolderPath);
-      if (!folder.isDirectory())
-        throw new FileNotFoundException(folder + " doesn't exist or is not a folder path.");
-      Files.walk(folder.toPath()).forEach(path -> {
-        File file = path.toFile();
-        if (file.isFile() && (file.getName().matches(".+_Mesh.*\\.pak") || file.getName().equalsIgnoreCase("idabpro.pak"))) {
-          log.fine("Found " + file.getPath());
-          meshPaks.add(file);
-        }
-      });
+      Path folder = clientPath.resolve(relativeFolderPath);
+      if (!Files.isDirectory(folder))
+        throw new NotDirectoryException(folder.toString());
+      Files.find(folder, Integer.MAX_VALUE, (path, attributes) -> attributes.isRegularFile() && (path.toString().matches(".+_Mesh.*\\.pak") || path.getFileName().toString().equalsIgnoreCase("idabpro.pak")))
+          .forEach(meshPaks::add);
     }
     return meshPaks;
   }
 
-  private void createMeshes(File outputFolder, List<File> meshPaks) throws IOException {
+  private void createMeshes(Path outputFolder, List<Path> meshPaks) throws IOException {
     if (requiredCgfs.isEmpty()) {
       log.info("No referenced meshes, skipping");
       return;
@@ -359,18 +359,18 @@ public class AionLevelsProcessor {
     int duplicateCount = availableMeshes.size() - uniqueMeshes.size();
     log.info("Writing " + uniqueMeshes.size() + " unique meshes (" + duplicateCount + " duplicates have been merged) …");
 
-    File meshFile = new File(outputFolder, "models.mesh");
-    try (DataOutputStream stream = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(meshFile)))) {
+    Path meshFile = outputFolder.resolve("models.mesh");
+    try (DataOutputStream stream = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(meshFile)))) {
       uniqueMeshes.forEach((data, paths) -> writeMeshes(paths, data, stream));
     }
-    log.info("Created " + meshFile.getCanonicalPath());
+    log.info("Created " + meshFile.toRealPath());
     if (!missingCgfs.isEmpty()) {
       missingCgfs.sort(String.CASE_INSENSITIVE_ORDER);
       log.warning(missingCgfs.size() + " missing CGFs: " + missingCgfs);
     }
   }
 
-  private void createGeoFiles(File outputFolder, List<LevelData> levels) throws IOException {
+  private void createGeoFiles(Path outputFolder, List<LevelData> levels) throws IOException {
     AtomicInteger i = new AtomicInteger();
     levels.parallelStream().forEach(level -> {
       try {
@@ -380,22 +380,15 @@ public class AionLevelsProcessor {
         log.log(Level.SEVERE, "Error generating " + level.levelId + ".geo", e);
       }
     });
-    log.info("Created " + i + " geo file" + (i.get() == 1 ? "" : "s") + " under " + outputFolder.getCanonicalPath());
+    log.info("Created " + i + " geo file" + (i.get() == 1 ? "" : "s") + " under " + outputFolder.toRealPath());
     int notGenerated = levels.size() - i.get();
     if (notGenerated != 0)
       log.warning(notGenerated + " file" + (notGenerated == 1 ? "" : "s") + " could be generated.");
   }
 
-  private byte[] decodeXml(byte[] xmlContent) throws IOException {
-    try (ByteArrayInputStream inputStream = new ByteArrayInputStream(xmlContent); ByteArrayOutputStream outputStream = new ByteArrayOutputStream(xmlContent.length)) {
-      BinaryXmlDecoder.Decode(inputStream, outputStream);
-      return outputStream.toByteArray();
-    }
-  }
-
-  private void createGeoFile(File outputFolder, LevelData level) throws IOException {
-    File geoFile = new File(outputFolder, level.levelId + ".geo");
-    try (DataOutputStream stream = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(geoFile)))) {
+  private void createGeoFile(Path outputFolder, LevelData level) throws IOException {
+    Path geoFile = outputFolder.resolve(level.levelId + ".geo");
+    try (DataOutputStream stream = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(geoFile)))) {
       short z = 0;
       boolean isAllSameZ = true;
       // terrain
@@ -426,7 +419,7 @@ public class AionLevelsProcessor {
       // brushes
       if (level.brushMeshData != null) {
         for (BrushEntry entry : level.brushMeshData.brushEntries) {
-          String meshFileName = level.brushMeshData.meshFileNames.get(entry.meshIdx);
+          String meshFileName = level.brushMeshData.meshFileNames.get(entry.meshIndex);
           if (shouldSkip(meshFileName, level))
             continue;
           byte[] meshFileNameBytes = meshFileName.getBytes(StandardCharsets.US_ASCII);
@@ -456,7 +449,7 @@ public class AionLevelsProcessor {
       // vegetation
       if (level.objectMeshData != null) {
         for (ObjectEntry entry : level.objectMeshData.objectEntries) {
-          String meshFileName = level.objectMeshData.meshFiles.get(entry.objectId);
+          String meshFileName = level.objectMeshData.meshFiles.get(entry.meshIndex);
           if (shouldSkip(meshFileName, level))
             continue;
           byte[] meshFileNameBytes = meshFileName.getBytes(StandardCharsets.US_ASCII);
@@ -490,10 +483,8 @@ public class AionLevelsProcessor {
       }
 
       for (EntityEntry entry : level.entityEntries) {
-        if (entry instanceof HouseEntry) {
-          writeHouseEntry((HouseEntry) entry, stream, level);
-        } else if (entry instanceof DoorEntry) {
-          writeDoorEntry((DoorEntry) entry, stream, level);
+        if (entry instanceof HouseEntry houseEntry) {
+          writeHouseEntry(houseEntry, stream, level);
         } else {
           writeEntityEntry(entry, stream, level);
         }
@@ -568,7 +559,7 @@ public class AionLevelsProcessor {
         return;
       }
     }
-    String name = entry.mesh;
+    String name = entry instanceof DoorEntry doorEntry ? entry.mesh + doorEntry.suffix : entry.mesh;
     byte[] nameBytes = name.getBytes(StandardCharsets.US_ASCII);
     stream.writeShort(nameBytes.length);
     stream.write(nameBytes);
@@ -599,39 +590,6 @@ public class AionLevelsProcessor {
       stream.writeShort(entry.entityId);
       stream.writeByte(0);
     }
-  }
-
-  private void writeDoorEntry(DoorEntry entry, DataOutputStream stream, LevelData level) throws IOException {
-    if (shouldSkip(entry.mesh, level))
-      return;
-    String name = entry.mesh + entry.suffix;
-    byte[] nameBytes = name.getBytes(StandardCharsets.US_ASCII);
-    stream.writeShort(nameBytes.length);
-    stream.write(nameBytes);
-    // pos
-    stream.writeFloat(entry.pos.x);
-    stream.writeFloat(entry.pos.y);
-    stream.writeFloat(entry.pos.z);
-
-    // transform
-    Matrix4f matrix = entry.getMatrix();
-    stream.writeFloat(matrix.m11);
-    stream.writeFloat(matrix.m21);
-    stream.writeFloat(matrix.m31);
-    stream.writeFloat(matrix.m12);
-    stream.writeFloat(matrix.m22);
-    stream.writeFloat(matrix.m32);
-    stream.writeFloat(matrix.m13);
-    stream.writeFloat(matrix.m23);
-    stream.writeFloat(matrix.m33);
-
-    // scale, always 1 for doors?
-    stream.writeFloat(entry.scale.x);
-    stream.writeFloat(entry.scale.y);
-    stream.writeFloat(entry.scale.z);
-    stream.writeByte(entry.type.getId());
-    stream.writeShort(entry.entityId);
-    stream.writeByte(0);
   }
 
   private void processCgfFiles(PakFile pakFile, Map<String, List<MeshData>> availableMeshes, AtomicInteger totalMeshes) {

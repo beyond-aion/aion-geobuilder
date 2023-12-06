@@ -1,6 +1,5 @@
 package com.aionemu.geobuilder.meshData;
 
-import com.aionemu.geobuilder.CollisionIntention;
 import com.aionemu.geobuilder.utils.Vector3;
 
 import java.util.List;

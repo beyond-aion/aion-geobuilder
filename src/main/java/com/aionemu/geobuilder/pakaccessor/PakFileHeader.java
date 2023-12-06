@@ -18,7 +18,7 @@ class PakFileHeader extends PakBlock {
   short fileNameSz;
   short extraFieldsSz;
 
-  byte fileNameBytes[];
+  byte[] fileNameBytes;
 
   long blockStartPosition;
 
@@ -30,21 +30,21 @@ class PakFileHeader extends PakBlock {
     return 4 + 26 + fileNameSz + extraFieldsSz;
   }
 
-  public void read(ByteBuffer stream) throws IOException {
-    extractVersion = stream.get();
-    extractSystem = stream.get();
-    flags = stream.getShort();
-    compMethod = stream.getShort();
-    lastModTime = stream.getShort();
-    lastModDate = stream.getShort();
-    crc = stream.getInt();
-    compressedSz = stream.getInt();
-    uncompressedSz = stream.getInt();
-    fileNameSz = stream.getShort();
-    extraFieldsSz = stream.getShort();
+  public void read(ByteBuffer buffer) throws IOException {
+    extractVersion = buffer.get();
+    extractSystem = buffer.get();
+    flags = buffer.getShort();
+    compMethod = buffer.getShort();
+    lastModTime = buffer.getShort();
+    lastModDate = buffer.getShort();
+    crc = buffer.getInt();
+    compressedSz = buffer.getInt();
+    uncompressedSz = buffer.getInt();
+    fileNameSz = buffer.getShort();
+    extraFieldsSz = buffer.getShort();
 
     fileNameBytes = new byte[fileNameSz];
-    stream.get(fileNameBytes);
+    buffer.get(fileNameBytes);
     if (compMethod != 0 && compMethod != 8)
       throw new PakFileFormatException("Unknown compression method " + compMethod);
   }

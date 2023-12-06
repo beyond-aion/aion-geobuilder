@@ -1,4 +1,4 @@
-package com.aionemu.geobuilder;
+package com.aionemu.geobuilder.meshData;
 
 public enum CollisionIntention {
   NONE(0),

@@ -4,8 +4,8 @@ import com.aionemu.geobuilder.entries.EntityEntry;
 import com.aionemu.geobuilder.meshData.BrushLstMeshData;
 import com.aionemu.geobuilder.meshData.ObjectMeshData;
 
-import java.io.File;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -16,24 +16,17 @@ public class LevelData {
 
   public final String levelId;
   public final String levelName;
-  public final File clientLevelFolder;
-  public final File clientLevelPakFile;
+  public final Path clientLevelPakFile;
   public volatile ByteBuffer landMapH32;
   public volatile byte[] terrainMaterials;
   public volatile BrushLstMeshData brushMeshData;
   public volatile ObjectMeshData objectMeshData;
   public volatile List<EntityEntry> entityEntries = Collections.emptyList();
 
-  public LevelData(String levelId, String levelName, File clientLevelFolder) {
+  public LevelData(String levelId, String levelName, Path clientLevelPakFile) {
     this.levelId = levelId;
     this.levelName = levelName;
-    this.clientLevelFolder = clientLevelFolder;
-    File[] list = clientLevelFolder.listFiles(f -> f.isFile() && f.getName().equalsIgnoreCase("level.pak"));
-    this.clientLevelPakFile = list == null || list.length == 0 ? null : list[0];
-  }
-
-  public boolean hasPak() {
-    return clientLevelPakFile != null && clientLevelPakFile.isFile();
+    this.clientLevelPakFile = clientLevelPakFile;
   }
 
   public Set<String> getAllMeshFileNames() {

@@ -5,12 +5,9 @@ import com.aionemu.geobuilder.meshData.ObjectMeshData;
 import com.aionemu.geobuilder.utils.PathSanitizer;
 import org.jdom2.Document;
 import org.jdom2.Element;
-import org.jdom2.input.SAXBuilder;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,11 +16,10 @@ public class ObjectsLstLoader {
   private ObjectsLstLoader() {
   }
 
-  public static ObjectMeshData loadLevelData(ByteBuffer levelData, ByteBuffer objects) throws Exception {
+  public static ObjectMeshData loadLevelData(Document levelData, ByteBuffer objects) throws Exception {
     ObjectMeshData objectMeshData = new ObjectMeshData();
     // read client maps
-    Document document = new SAXBuilder().build(new ByteArrayInputStream(levelData.array()));
-    Element rootNode = document.getRootElement();
+    Element rootNode = levelData.getRootElement();
     List<Element> vegetation = rootNode.getChildren("Vegetation").get(0).getChildren();
 
     objectMeshData.meshFiles = new ArrayList<>(vegetation.size());
@@ -71,7 +67,7 @@ public class ObjectsLstLoader {
       entry.rotX = rotX * 360 / 255f;
       entry.rotY = rotY * 360 / 255f;
       entry.rotZ = rotZ * 360 / 255f;
-      entry.objectId = objectId;
+      entry.meshIndex = objectId;
 
       objectMeshData.objectEntries.add(entry);
     }

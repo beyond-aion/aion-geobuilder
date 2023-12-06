@@ -11,9 +11,9 @@ public enum EntryType {
 	DOOR(6),
 	DOOR2(7);
 
-	byte id;
+	private final byte id;
 
-	private EntryType(int id) {
+	EntryType(int id) {
 		this.id = (byte)id;
 	}
 	public byte getId() {

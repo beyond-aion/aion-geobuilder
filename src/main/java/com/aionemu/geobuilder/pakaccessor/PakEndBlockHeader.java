@@ -14,14 +14,14 @@ class PakEndBlockHeader extends PakBlock {
   long centralDirOffset;
   int commentLength;
 
-  public void read(ByteBuffer stream) {
-    diskNum = Short.toUnsignedInt(stream.getShort());
-    firstDisk = Short.toUnsignedInt(stream.getShort());
-    thisDiskCentralDirCount = Short.toUnsignedInt(stream.getShort());
-    totalCentralDirCount = Short.toUnsignedInt(stream.getShort());
-    centralDirSize = Integer.toUnsignedLong(stream.getInt());
-    centralDirOffset = Integer.toUnsignedLong(stream.getInt());
-    commentLength = Short.toUnsignedInt(stream.getShort());
+  public void read(ByteBuffer buffer) {
+    diskNum = Short.toUnsignedInt(buffer.getShort());
+    firstDisk = Short.toUnsignedInt(buffer.getShort());
+    thisDiskCentralDirCount = Short.toUnsignedInt(buffer.getShort());
+    totalCentralDirCount = Short.toUnsignedInt(buffer.getShort());
+    centralDirSize = Integer.toUnsignedLong(buffer.getInt());
+    centralDirOffset = Integer.toUnsignedLong(buffer.getInt());
+    commentLength = Short.toUnsignedInt(buffer.getShort());
   }
 
   public void write(DataOutputStream stream) throws IOException {

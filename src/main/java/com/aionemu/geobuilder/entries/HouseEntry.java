@@ -6,7 +6,7 @@ import java.util.stream.Stream;
 
 public class HouseEntry extends EntityEntry {
 
-  public int address;
+  public short address;
   public List<String> meshes = new ArrayList<>();
 
   public HouseEntry() {

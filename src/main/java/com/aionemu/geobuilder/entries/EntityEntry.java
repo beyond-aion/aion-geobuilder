@@ -1,7 +1,7 @@
 package com.aionemu.geobuilder.entries;
 
-import com.aionemu.geobuilder.utils.Vector3;
 import com.aionemu.geobuilder.utils.Matrix4f;
+import com.aionemu.geobuilder.utils.Vector3;
 
 import java.util.stream.Stream;
 
@@ -15,7 +15,7 @@ public class EntityEntry {
   public EntryType type = EntryType.NONE;
 
   public Stream<String> getAllMeshNames() {
-    return mesh == null ? Stream.empty() : Stream.of(mesh);
+    return Stream.ofNullable(mesh);
   }
 
   public Matrix4f getMatrix() {

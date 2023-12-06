@@ -10,7 +10,7 @@ abstract class PakBlock {
 
   abstract long getBodySize();
 
-  abstract void read(ByteBuffer stream) throws IOException;
+  abstract void read(ByteBuffer buffer) throws IOException;
 
   abstract void write(DataOutputStream stream) throws IOException;
 }
