@@ -2,7 +2,7 @@ package com.aionemu.geobuilder.utils;
 
 import java.util.Objects;
 
-public class Vector3 {
+public class Vector3 implements Comparable<Vector3> {
 
   public float x, y, z;
 
@@ -41,5 +41,16 @@ public class Vector3 {
     result.y = num2;
     result.z = num3;
     return result;
+  }
+
+  @Override
+  public int compareTo(Vector3 vector3) {
+    int diff = Float.compare(x, vector3.x);
+    if (diff != 0)
+      return diff;
+    diff = Float.compare(y, vector3.y);
+    if (diff != 0)
+      return diff;
+    return Float.compare(z, vector3.z);
   }
 }

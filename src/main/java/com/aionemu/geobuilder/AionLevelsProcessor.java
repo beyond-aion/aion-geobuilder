@@ -45,11 +45,16 @@ public class AionLevelsProcessor {
   @Parameter(names = "-o", description = "Path to the output folder", order = 3)
   protected Path outPath = Path.of("./out");
 
-  @Parameter(names = "-v", description = "Activate verbose logging", order = 4)
+  @Parameter(names = "-dc", description = "Disable mesh compacting (removal of unused or duplicate vertices and degenerate or duplicate faces)", order = 4)
+  protected boolean disableMeshCompacting;
+
+  @Parameter(names = "-ds", description = "Disable mesh sorting to keep original order of vertices, faces and the face winding order", order = 7)
+  protected boolean disableMeshSorting;
+
+  @Parameter(names = "-v", description = "Activate verbose logging", order = 8)
   protected boolean verbose;
 
   private static final Logger log = Logger.getLogger("GeoBuilder");
-  private static final Set<String> ignoredCgfs = new HashSet<>();
 
   static {
     System.setProperty("java.util.logging.SimpleFormatter.format", "%1$tT [%4$s] %5$s%6$s");
@@ -78,9 +83,6 @@ public class AionLevelsProcessor {
     };
     consoleHandler.setLevel(Level.ALL);
     log.addHandler(consoleHandler);
-
-    ignoredCgfs.add("objects/npc/level_object/idyun_bridge/idyun_bridge_01a.cga");
-    ignoredCgfs.add("levels/common/light/structures/props/exterior/pr_l_caldron.cgf");
   }
 
   private static final int H32_POINT_SIZE = 3;
@@ -205,11 +207,10 @@ public class AionLevelsProcessor {
   private void processLevels(List<LevelData> levels, Map<String, Short> houseAddresses) {
     levels.parallelStream().forEach(level -> {
       if (parseLevelPak(level, houseAddresses))
-        requiredCgfs.addAll(level.getAllMeshFileNames());
+        level.streamAllMeshFileNames().filter(m -> !isIgnored(m, level)).forEach(requiredCgfs::add);
       log.info(level + ": Done\r");
     });
     log.info("Found " + requiredCgfs.size() + " mesh references in " + levels.size() + " level" + (levels.size() == 1 ? "" : "s"));
-    requiredCgfs.removeAll(ignoredCgfs);
   }
 
   private boolean parseLevelPak(LevelData level, Map<String, Short> houseAddresses) {
@@ -353,6 +354,12 @@ public class AionLevelsProcessor {
       log.warning("Only " + processedCount + " of " + totalMeshes + " meshes have been successfully processed!");
     log.info("Found " + availableMeshes.size() + " valid meshes of " + totalMeshes + " total (skipped " + emptyCgfs.size() + " empty and " + missingCgfs.size() + " missing ones)");
 
+    if (!disableMeshCompacting)
+      compact(availableMeshes.values());
+
+    log.info("Merging duplicate meshes\r");
+    if (!disableMeshSorting)
+      availableMeshes.values().parallelStream().forEach(m -> m.forEach(MeshData::sort)); // this helps find duplicates
     Map<List<MeshData>, String> uniqueMeshes = availableMeshes.entrySet().stream()
         .sorted(Map.Entry.comparingByKey()) // sort to generate .mesh files with deterministic, comparable hashes
         .collect(Collectors.groupingBy(Map.Entry::getValue, LinkedHashMap::new, Collectors.mapping(Map.Entry::getKey, Collectors.joining("|"))));
@@ -368,6 +375,17 @@ public class AionLevelsProcessor {
       missingCgfs.sort(String.CASE_INSENSITIVE_ORDER);
       log.warning(missingCgfs.size() + " missing CGFs: " + missingCgfs);
     }
+  }
+
+  private void compact(Collection<List<MeshData>> meshes) {
+    log.info("Compacting meshes …");
+    AtomicInteger oldSize = new AtomicInteger(), newSize = new AtomicInteger();
+    meshes.parallelStream().forEach(m -> m.parallelStream().forEach(meshData -> {
+      oldSize.addAndGet(meshData.getSize());
+      meshData.compact();
+      newSize.addAndGet(meshData.getSize());
+    }));
+    log.info("Compacted meshes to " + Math.round(10000f * newSize.get() / oldSize.get()) / 100f + " % of their original size (before: " + (oldSize.get() / 1024 / 1024) + " MiB, after: " + (newSize.get() / 1024 / 1024) + " MiB)");
   }
 
   private void createGeoFiles(Path outputFolder, List<LevelData> levels) throws IOException {
@@ -494,8 +512,8 @@ public class AionLevelsProcessor {
 
   private boolean shouldSkip(String meshFileName, LevelData level) {
     if (!processedCgfs.contains(meshFileName)) { // skip ignored or missing cgf
-      if (!ignoredCgfs.contains(meshFileName) && !missingCgfs.contains(meshFileName))
-        log.warning(level + ": Cgf was not processed: " + meshFileName);
+      if (!isIgnored(meshFileName, level) && !missingCgfs.contains(meshFileName))
+        log.warning(level + ": " + meshFileName + " was not processed");
       return true;
     }
     return emptyCgfs.contains(meshFileName);
@@ -652,10 +670,23 @@ public class AionLevelsProcessor {
         if (mesh.faces.size() > 0xFFFF)
           throw new IOException("Data doesn't fit in short (mesh.faces.size() = " + mesh.faces.size() + ")");
         stream.writeShort(mesh.faces.size());
-        for (MeshFace face : mesh.faces) {
-          stream.writeShort(face.v0);
-          stream.writeShort(face.v1);
-          stream.writeShort(face.v2);
+        int maxIndex = mesh.getMaxFaceVertexIndex();
+        if (maxIndex > 0xFFFF)
+          throw new IOException("MeshFace index " + maxIndex + " doesn't fit in short");
+        if (maxIndex > 0xFF) {
+          stream.writeByte(2);
+          for (MeshFace face : mesh.faces) {
+            stream.writeShort(face.v0);
+            stream.writeShort(face.v1);
+            stream.writeShort(face.v2);
+          }
+        } else {
+          stream.writeByte(1);
+          for (MeshFace face : mesh.faces) {
+            stream.writeByte(face.v0);
+            stream.writeByte(face.v1);
+            stream.writeByte(face.v2);
+          }
         }
         stream.writeByte(mesh.materialId);
         stream.writeByte(mesh.collisionIntention);
@@ -663,5 +694,16 @@ public class AionLevelsProcessor {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private boolean isIgnored(String meshFileName, LevelData level) {
+    // TODO remove this method after figuring out the correct collision logic
+    return switch (meshFileName) {
+      // Door ID 145 is invisible and clickable but can be walked through (actual obstacle is elemental_alchemyroom_collisionwall.cgf)
+      case "objects/npc/level_object/idyun_bridge/idyun_bridge_01a.cga" -> Set.of("300280000", "300620000").contains(level.levelId);
+      // mesh collides in 300040000 x:676.4767 y:1196.3914 z:143.58203 but doesn't in instances 300280000 or 300620000 (near Vasharti)
+      case "levels/common/light/structures/props/exterior/pr_l_caldron.cgf" -> Set.of("300280000", "300620000").contains(level.levelId);
+      default -> false;
+    };
   }
 }

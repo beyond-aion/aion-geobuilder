@@ -8,8 +8,6 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class LevelData {
@@ -29,13 +27,13 @@ public class LevelData {
     this.clientLevelPakFile = clientLevelPakFile;
   }
 
-  public Set<String> getAllMeshFileNames() {
+  public Stream<String> streamAllMeshFileNames() {
     Stream<Stream<String>> streams = Stream.of(
-      brushMeshData == null ? Stream.empty() : brushMeshData.meshFileNames.stream(),
-      objectMeshData == null ? Stream.empty() : objectMeshData.meshFiles.stream(),
+      brushMeshData == null ? Stream.empty() : brushMeshData.brushEntries.stream().mapToInt(o -> o.meshIndex).distinct().mapToObj(brushMeshData.meshFileNames::get), // map only used meshes in case some are not placed in brush.lst
+      objectMeshData == null ? Stream.empty() : objectMeshData.objectEntries.stream().mapToInt(o -> o.meshIndex).distinct().mapToObj(objectMeshData.meshFiles::get), // map only used meshes in case some are not placed in objects.lst
       entityEntries.stream().flatMap(EntityEntry::getAllMeshNames)
     );
-    return streams.flatMap(s->s).collect(Collectors.toSet());
+    return streams.flatMap(s->s);
   }
 
   @Override
