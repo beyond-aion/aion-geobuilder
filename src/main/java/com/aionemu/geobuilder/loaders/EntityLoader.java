@@ -2,7 +2,6 @@ package com.aionemu.geobuilder.loaders;
 
 import com.aionemu.geobuilder.entries.EntryType;
 import com.aionemu.geobuilder.entries.DoorEntry;
-import com.aionemu.geobuilder.entries.EntityClass;
 import com.aionemu.geobuilder.entries.EntityEntry;
 import com.aionemu.geobuilder.entries.HouseEntry;
 import com.aionemu.geobuilder.utils.PathSanitizer;
@@ -45,8 +44,6 @@ public class EntityLoader {
           entry.mesh = mesh;
           entry2.mesh = mesh;
           entry2.suffix = "_state2";
-          entry.entityClass = EntityClass.DOOR;
-          entry2.entityClass = entry.entityClass;
           entry.type = EntryType.DOOR;
           entry2.type = EntryType.DOOR2;
           entityEntries.add(entry);
@@ -69,7 +66,6 @@ public class EntityLoader {
           entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId")); // static id
           loadNameAnglePositionAndScale(node, entry);
           entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("fileLadderCGF"));
-          entry.entityClass = EntityClass.PLACEABLE;
           entry.type = EntryType.PLACEABLE;
           entityEntries.add(entry);
         }
@@ -100,7 +96,6 @@ public class EntityLoader {
             entry.type = EntryType.EVENT;
             BrushLstLoader.EVENT_MESHES.add(entry.mesh);
           }
-          entry.entityClass = EntityClass.BASIC;
           entityEntries.add(entry);
         }
       } else if (entityClass.equalsIgnoreCase("TownObject")) {
@@ -113,7 +108,6 @@ public class EntityLoader {
           entry.startLevel = Integer.parseInt(prop.getAttributeValue("StartLevel"));
           entry.townId = Integer.parseInt(prop.getAttributeValue("TownID"));
           entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("object_Model"));
-          entry.entityClass = EntityClass.TOWN_OBJECT;
           entry.type = EntryType.TOWN;
           entityEntries.add(entry);
           for (int i = entry.startLevel; i <= 5; i++) {
@@ -127,7 +121,7 @@ public class EntityLoader {
             entry2.angle = entry.angle;
             entry2.pos = entry.pos;
             entry2.scale = entry.scale;
-            entry2.entityClass = entry.entityClass;
+            entry2.type = entry.type;
             entry2.level = i;
             entry2.startLevel = entry.startLevel;
             entry2.townId = entry.townId;
@@ -140,7 +134,6 @@ public class EntityLoader {
           HouseEntry entry = new HouseEntry();
           entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId")); // static id
           loadNameAnglePositionAndScale(node, entry);
-          entry.entityClass = EntityClass.HOUSE;
           String addressName = prop.getAttributeValue("address_Address");
           entry.address = addressName.isEmpty() ? -1 : addresses.get(addressName);
 
@@ -177,7 +170,6 @@ public class EntityLoader {
                     entry2.pos = entry.pos;
                     entry2.scale = entry.scale;
                     entry2.address = entry.address;
-                    entry2.entityClass = entry.entityClass;
                     Vector3 offset = Vector3.transform(new Vector3(xOffset, yOffset, zOffset), entry2.getMatrix());
                     entry2.pos = new Vector3(entry2.pos.x + offset.x, entry2.pos.y + offset.y, entry2.pos.z + offset.z);
                     entry = entry2;
@@ -186,7 +178,6 @@ public class EntityLoader {
               }
               String housingobjDoor = build.getAttributeValue("housingobjDoor");
               if (!housingobjDoor.isEmpty()) {
-                entry.entityClass = EntityClass.HOUSE_DOOR;
                 entry.mesh = PathSanitizer.sanitize(housingobjDoor);
                 entry.meshes.add(entry.mesh);
               }

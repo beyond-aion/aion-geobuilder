@@ -7,7 +7,6 @@ import java.util.stream.Stream;
 
 public class EntityEntry {
 
-  public EntityClass entityClass;
   public int entityId, level, startLevel, townId;
   public String name;
   public Vector3 angle, pos, scale;

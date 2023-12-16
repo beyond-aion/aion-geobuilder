@@ -301,7 +301,8 @@ public class AionLevelsProcessor {
     log.fine(level + ": [mission_mission0.xml] Processing entities …\r");
     try {
       level.entityEntries = EntityLoader.loadPlaceables(mission, houseAddresses);
-      requiredDoorCgas.addAll(level.entityEntries.stream().filter(e -> e.entityClass == EntityClass.DOOR).map(e -> e.mesh).toList());
+      // secondary door state will be generated from doors in primary state
+      level.entityEntries.stream().filter(e -> e.type == EntryType.DOOR).map(e -> e.mesh).forEach(requiredDoorCgas::add);
     } catch (Exception e) {
       log.log(Level.SEVERE, level + ": Error parsing mission_mission0.xml", e);
     }
@@ -559,7 +560,7 @@ public class AionLevelsProcessor {
 
   private void writeEntityEntry(EntityEntry entry, DataOutputStream stream, LevelData level) throws IOException {
     if (shouldSkip(entry.mesh, level)) {
-      if (entry.entityClass == EntityClass.TOWN_OBJECT) {
+      if (entry.type == EntryType.TOWN) {
         boolean found = false;
         for (int i = entry.level; i >= 1; i--) {
           String meshName = entry.mesh.replace(entry.level + ".cgf", i + ".cgf");
@@ -570,7 +571,7 @@ public class AionLevelsProcessor {
           }
         }
         if (!found) {
-          log.warning(level + ": Could not find Entity cgf for EntityClass TOWN_OBJECT: " + entry.mesh);
+          log.warning(level + ": Could not find town entity mesh: " + entry.mesh + " (" + entry.pos + ",  town: " + entry.townId + ')');
           return;
         }
       } else {
@@ -601,7 +602,7 @@ public class AionLevelsProcessor {
     stream.writeFloat(entry.scale.y);
     stream.writeFloat(entry.scale.z);
     stream.writeByte(entry.type.getId());
-    if (entry.entityClass == EntityClass.TOWN_OBJECT) {
+    if (entry.type == EntryType.TOWN) {
       stream.writeShort(entry.townId);
       stream.writeByte(entry.level);
     } else {
