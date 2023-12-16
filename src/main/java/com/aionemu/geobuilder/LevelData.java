@@ -27,6 +27,10 @@ public class LevelData {
     this.clientLevelPakFile = clientLevelPakFile;
   }
 
+  public boolean isTestLevel() {
+    return levelId.charAt(0) == '9' && levelName.toLowerCase().contains("test") || levelName.equalsIgnoreCase("IDTest_Dungeon");
+  }
+
   public Stream<String> streamAllMeshFileNames() {
     Stream<Stream<String>> streams = Stream.of(
       brushMeshData == null ? Stream.empty() : brushMeshData.brushEntries.stream().mapToInt(o -> o.meshIndex).distinct().mapToObj(brushMeshData.meshFileNames::get), // map only used meshes in case some are not placed in brush.lst

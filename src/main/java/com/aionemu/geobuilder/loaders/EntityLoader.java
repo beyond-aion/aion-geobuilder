@@ -4,6 +4,7 @@ import com.aionemu.geobuilder.entries.EntryType;
 import com.aionemu.geobuilder.entries.DoorEntry;
 import com.aionemu.geobuilder.entries.EntityEntry;
 import com.aionemu.geobuilder.entries.HouseEntry;
+import com.aionemu.geobuilder.entries.TownEntry;
 import com.aionemu.geobuilder.utils.PathSanitizer;
 import com.aionemu.geobuilder.utils.Vector3;
 import org.jdom2.Document;
@@ -33,7 +34,7 @@ public class EntityLoader {
         if (!prop.getAttributeValue("object_AnimatedModel").isEmpty()) {
           DoorEntry entry = new DoorEntry();
           DoorEntry entry2 = new DoorEntry();
-          entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId"));
+          entry.entityId = node.getAttribute("EntityId").getIntValue();
           entry2.entityId = entry.entityId;
           loadNameAnglePositionAndScale(node, entry);
           entry2.name = entry.name;
@@ -63,7 +64,7 @@ public class EntityLoader {
         Element prop = node.getChild("Properties");
         if (!prop.getAttributeValue("fileLadderCGF").isEmpty() && !prop.getAttributeValue("fileLadderCGF").endsWith(".saf")) {
           EntityEntry entry = new EntityEntry();
-          entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId")); // static id
+          entry.entityId = node.getAttribute("EntityId").getIntValue(); // static id
           loadNameAnglePositionAndScale(node, entry);
           entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("fileLadderCGF"));
           entry.type = EntryType.PLACEABLE;
@@ -101,38 +102,19 @@ public class EntityLoader {
       } else if (entityClass.equalsIgnoreCase("TownObject")) {
         Element prop = node.getChild("Properties");
         if (!prop.getAttributeValue("object_Model").isEmpty() && !prop.getAttributeValue("object_Model").endsWith(".saf")) {
-          EntityEntry entry = new EntityEntry();
-          entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId")); // static id
+          TownEntry entry = new TownEntry();
+          entry.entityId = node.getAttribute("EntityId").getIntValue(); // static id
           loadNameAnglePositionAndScale(node, entry);
-          entry.level = Integer.parseInt(prop.getAttributeValue("Level"));
-          entry.startLevel = Integer.parseInt(prop.getAttributeValue("StartLevel"));
-          entry.townId = Integer.parseInt(prop.getAttributeValue("TownID"));
+          entry.level = prop.getAttribute("Level").getIntValue();
+          entry.townId = prop.getAttribute("TownID").getIntValue();
           entry.mesh = PathSanitizer.sanitize(prop.getAttributeValue("object_Model"));
-          entry.type = EntryType.TOWN;
           entityEntries.add(entry);
-          for (int i = entry.startLevel; i <= 5; i++) {
-            EntityEntry entry2 = new EntityEntry();
-            entry2.mesh = entry.mesh.replace("01.cgf", "0" + i + ".cgf");
-            if (entry2.mesh.equalsIgnoreCase(entry.mesh)) {
-              continue;
-            }
-            entry2.entityId = entry.entityId;
-            entry2.name = entry.name;
-            entry2.angle = entry.angle;
-            entry2.pos = entry.pos;
-            entry2.scale = entry.scale;
-            entry2.type = entry.type;
-            entry2.level = i;
-            entry2.startLevel = entry.startLevel;
-            entry2.townId = entry.townId;
-            entityEntries.add(entry2);
-          }
         }
       } else if (entityClass.equalsIgnoreCase("HousingBuilding")) {
         Element prop = node.getChild("Properties");
         if (prop != null) {
           HouseEntry entry = new HouseEntry();
-          entry.entityId = Integer.parseInt(node.getAttributeValue("EntityId")); // static id
+          entry.entityId = node.getAttribute("EntityId").getIntValue(); // static id
           loadNameAnglePositionAndScale(node, entry);
           String addressName = prop.getAttributeValue("address_Address");
           entry.address = addressName.isEmpty() ? -1 : addresses.get(addressName);

@@ -30,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class AionLevelsProcessor {
 
@@ -91,7 +92,6 @@ public class AionLevelsProcessor {
   private final Set<String> requiredDoorCgas = ConcurrentHashMap.newKeySet();
 
   private final Set<String> processedCgfs = ConcurrentHashMap.newKeySet();
-  private final List<String> missingCgfs = new ArrayList<>();
   private final Set<String> emptyCgfs = ConcurrentHashMap.newKeySet();
 
   protected void process() {
@@ -116,7 +116,7 @@ public class AionLevelsProcessor {
         List<Path> meshPaks = collectMeshFilePaths();
 
         log.info("Generating mesh file …");
-        createMeshes(outPath, meshPaks);
+        createMeshes(outPath, meshPaks, levels);
 
         log.info("Generating geo files …");
         createGeoFiles(outPath, levels);
@@ -218,7 +218,7 @@ public class AionLevelsProcessor {
     ByteBuffer brushLst, objectsLst, mission, landMapH32;
     Document levelData = null;
     String levelName = level.levelName.toLowerCase();
-    boolean needsBrushLst = !(levelName.contains("test") || levelName.contains("system_basic") || levelName.endsWith("prison"));
+    boolean needsBrushLst = !(level.isTestLevel() || levelName.contains("system_basic") || levelName.endsWith("prison"));
     try (PakFile pakFile = PakFile.open(level.clientLevelPakFile)) {
       ByteBuffer levelDataXml = pakFile.unpak("leveldata.xml");
       if (levelDataXml == null)
@@ -333,7 +333,7 @@ public class AionLevelsProcessor {
     return meshPaks;
   }
 
-  private void createMeshes(Path outputFolder, List<Path> meshPaks) throws IOException {
+  private void createMeshes(Path outputFolder, List<Path> meshPaks, List<LevelData> levels) throws IOException {
     if (requiredCgfs.isEmpty()) {
       log.info("No referenced meshes, skipping");
       return;
@@ -349,12 +349,26 @@ public class AionLevelsProcessor {
         log.log(Level.SEVERE, "", e);
       }
     });
-    missingCgfs.addAll(requiredCgfs);
-    int processedCount = processedCgfs.size() + missingCgfs.size();
+    List<String> missingMeshes = new ArrayList<>(requiredCgfs);
+    int processedCount = processedCgfs.size() + missingMeshes.size();
     if (processedCount != totalMeshes.get()) // should only happen on parsing/processing error
       log.warning("Only " + processedCount + " of " + totalMeshes + " meshes have been successfully processed!");
-    log.info("Found " + availableMeshes.size() + " valid meshes of " + totalMeshes + " total (skipped " + emptyCgfs.size() + " empty and " + missingCgfs.size() + " missing ones)");
-
+    log.info("Found " + availableMeshes.size() + " valid meshes of " + totalMeshes + " total (skipped " + emptyCgfs.size() + " empty and " + missingMeshes.size() + " missing ones)");
+    if (!missingMeshes.isEmpty()) {
+      Set<String> missingTownGrowthMeshes = levels.stream().flatMap(l -> l.entityEntries.stream().flatMap(e -> e instanceof TownEntry townEntry ? townEntry.getHigherLevelMeshNames() : Stream.empty())).filter(missingMeshes::contains).collect(Collectors.toSet());
+      Set<String> missingTestLevelMeshes = levels.stream().filter(LevelData::isTestLevel).flatMap(LevelData::streamAllMeshFileNames).filter(missingMeshes::contains).collect(Collectors.toSet());
+      if (!missingTownGrowthMeshes.isEmpty()) {
+        log.fine(missingTownGrowthMeshes.size() + " missing meshes are optional town growth meshes");
+      }
+      if (!missingTestLevelMeshes.isEmpty()) {
+        log.fine(missingTestLevelMeshes.size() + " missing meshes are on test maps: " + missingTestLevelMeshes.stream().sorted().collect(Collectors.joining(", ")));
+      }
+      missingMeshes.removeAll(missingTownGrowthMeshes);
+      missingMeshes.removeAll(missingTestLevelMeshes);
+      if (!missingMeshes.isEmpty()) {
+        log.warning(missingMeshes.size() + " missing meshes may exist in an unscanned archive: " + missingMeshes.stream().sorted().collect(Collectors.joining(", ")));
+      }
+    }
     if (!disableMeshCompacting)
       compact(availableMeshes.values());
 
@@ -372,10 +386,6 @@ public class AionLevelsProcessor {
       uniqueMeshes.forEach((data, paths) -> writeMeshes(paths, data, stream));
     }
     log.info("Created " + meshFile.toRealPath());
-    if (!missingCgfs.isEmpty()) {
-      missingCgfs.sort(String.CASE_INSENSITIVE_ORDER);
-      log.warning(missingCgfs.size() + " missing CGFs: " + missingCgfs);
-    }
   }
 
   private void compact(Collection<List<MeshData>> meshes) {
@@ -513,7 +523,7 @@ public class AionLevelsProcessor {
 
   private boolean shouldSkip(String meshFileName, LevelData level) {
     if (!processedCgfs.contains(meshFileName)) { // skip ignored or missing cgf
-      if (!isIgnored(meshFileName, level) && !missingCgfs.contains(meshFileName))
+      if (!isIgnored(meshFileName, level) && !requiredCgfs.contains(meshFileName))
         log.warning(level + ": " + meshFileName + " was not processed");
       return true;
     }
@@ -560,23 +570,7 @@ public class AionLevelsProcessor {
 
   private void writeEntityEntry(EntityEntry entry, DataOutputStream stream, LevelData level) throws IOException {
     if (shouldSkip(entry.mesh, level)) {
-      if (entry.type == EntryType.TOWN) {
-        boolean found = false;
-        for (int i = entry.level; i >= 1; i--) {
-          String meshName = entry.mesh.replace(entry.level + ".cgf", i + ".cgf");
-          if (!shouldSkip(meshName, level)) {
-            entry.mesh = meshName;
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          log.warning(level + ": Could not find town entity mesh: " + entry.mesh + " (" + entry.pos + ",  town: " + entry.townId + ')');
-          return;
-        }
-      } else {
-        return;
-      }
+      return;
     }
     String name = entry instanceof DoorEntry doorEntry ? entry.mesh + doorEntry.suffix : entry.mesh;
     byte[] nameBytes = name.getBytes(StandardCharsets.US_ASCII);
@@ -602,9 +596,9 @@ public class AionLevelsProcessor {
     stream.writeFloat(entry.scale.y);
     stream.writeFloat(entry.scale.z);
     stream.writeByte(entry.type.getId());
-    if (entry.type == EntryType.TOWN) {
-      stream.writeShort(entry.townId);
-      stream.writeByte(entry.level);
+    if (entry instanceof TownEntry townEntry) {
+      stream.writeShort(townEntry.townId);
+      stream.writeByte(townEntry.level);
     } else {
       stream.writeShort(entry.entityId);
       stream.writeByte(0);
