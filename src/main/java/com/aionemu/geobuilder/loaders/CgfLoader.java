@@ -4,13 +4,17 @@ import com.aionemu.geobuilder.meshData.CollisionIntention;
 import com.aionemu.geobuilder.cgfData.*;
 import com.aionemu.geobuilder.meshData.MeshData;
 import com.aionemu.geobuilder.meshData.MeshFace;
+import com.aionemu.geobuilder.pakaccessor.PakFile;
+import com.aionemu.geobuilder.utils.BinaryXmlParser;
 import com.aionemu.geobuilder.utils.Matrix4f;
 import com.aionemu.geobuilder.utils.Quaternion;
 import com.aionemu.geobuilder.utils.Vector3;
+import org.jdom2.Element;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
 
 /**
@@ -27,7 +31,7 @@ public class CgfLoader {
 
   private static final byte[] SIGNATURE = "NCAion\0\0".getBytes();
   private static final Map<String, Integer> materialNamesAndIds = new HashMap<>();
-  private static final Set<Integer> materialIntentionIds = new HashSet<>();
+  private static final Set<Integer> useSkillMaterialIds = new HashSet<>();
   private final List<CgfChunkHeader> chunkHeaders = new ArrayList<>();
   private final Map<Integer, CgfMaterialData> materialDataByChunkId = new HashMap<>();
   private final List<CgfNodeData> nodes = new ArrayList<>();
@@ -37,191 +41,27 @@ public class CgfLoader {
   private final List<CgfBoneAnimData> bones = new ArrayList<>();
   private final HashMap<Integer, CgfBoneMeshData> boneMeshes = new HashMap<>();
 
-  static {
-    materialNamesAndIds.put("mat_default", 0);
-    materialNamesAndIds.put("mat_nowalk_obstacle0", 1);
-    materialNamesAndIds.put("mat_nowalk_obstacle1", 2);
-    materialNamesAndIds.put("mat_nowalk_obstacle2", 3);
-    materialNamesAndIds.put("mat_nowalk_obstacle3", 4);
-    materialNamesAndIds.put("mat_nowalk_obstacle4", 5);
-    materialNamesAndIds.put("mat_walk_obstacle1", 6);
-    materialNamesAndIds.put("mat_walk_obstacle2", 7);
-    materialNamesAndIds.put("mat_walk_obstacle3", 8);
-    materialNamesAndIds.put("mat_walk_obstacle4", 9);
-    materialNamesAndIds.put("mat_nobreathing", 10);
-    materialNamesAndIds.put("mat_abyss_castle_shield", 11);
-    materialNamesAndIds.put("mat_lava", 12);
-    materialNamesAndIds.put("mat_passby_dmg_shield", 13);
-    materialNamesAndIds.put("mat_ab1_light_start", 14);
-    materialNamesAndIds.put("mat_ab1_dark_start", 15);
-    materialNamesAndIds.put("mat_ab1_flamemoon", 16);
-    materialNamesAndIds.put("mat_grass", 20);
-    materialNamesAndIds.put("mat_sand", 21);
-    materialNamesAndIds.put("mat_dirt", 22);
-    materialNamesAndIds.put("mat_pavement", 23);
-    materialNamesAndIds.put("mat_wood", 24);
-    materialNamesAndIds.put("mat_stone_tough", 25);
-    materialNamesAndIds.put("mat_stone_marble", 26);
-    materialNamesAndIds.put("mat_pebble", 27);
-    materialNamesAndIds.put("mat_metal_plate", 28);
-    materialNamesAndIds.put("mat_metal_wirenet", 29);
-    materialNamesAndIds.put("mat_fabric", 30);
-    materialNamesAndIds.put("mat_leaves", 31);
-    materialNamesAndIds.put("mat_water", 32);
-    materialNamesAndIds.put("mat_water_deep", 33);
-    materialNamesAndIds.put("mat_magic_circle", 34);
-    materialNamesAndIds.put("mat_flesh", 35);
-    materialNamesAndIds.put("mat_sand_wet", 36);
-    materialNamesAndIds.put("mat_under_water", 37);
-    materialNamesAndIds.put("mat_mob_insect", 38);
-    materialNamesAndIds.put("mat_mob_reptile", 39);
-    materialNamesAndIds.put("mat_mob_rotten", 40);
-    materialNamesAndIds.put("mat_mob_hard", 41);
-    materialNamesAndIds.put("mat_mob_wood", 42);
-    materialNamesAndIds.put("mat_mob_orc", 43);
-    materialNamesAndIds.put("mat_mob_boss", 44);
-    materialNamesAndIds.put("mat_e3item_book", 45);
-    materialNamesAndIds.put("mat_item_wood", 46);
-    materialNamesAndIds.put("foot_2leg_small", 47);
-    materialNamesAndIds.put("foot_2leg_medium", 48);
-    materialNamesAndIds.put("foot_2leg_big", 49);
-    materialNamesAndIds.put("foot_4leg_small", 50);
-    materialNamesAndIds.put("foot_4leg_medium", 51);
-    materialNamesAndIds.put("foot_4leg_big", 52);
-    materialNamesAndIds.put("foot_reptile_small", 53);
-    materialNamesAndIds.put("foot_reptile_medium", 54);
-    materialNamesAndIds.put("foot_reptile_big", 55);
-    materialNamesAndIds.put("foot_flying", 56);
-    materialNamesAndIds.put("foot_insect", 57);
-    materialNamesAndIds.put("foot_etc", 58);
-    materialNamesAndIds.put("mat_snow", 59);
-    materialNamesAndIds.put("mat_fire", 60);
-    materialNamesAndIds.put("mat_cond_fire", 61);
-    materialNamesAndIds.put("mat_weather_cond_fire", 62);
-    materialNamesAndIds.put("mat_time_cond_fire", 63);
-    materialNamesAndIds.put("mat_sword_s", 64);
-    materialNamesAndIds.put("mat_sword_m", 65);
-    materialNamesAndIds.put("mat_sword_h", 66);
-    materialNamesAndIds.put("mat_mace_s", 67);
-    materialNamesAndIds.put("mat_mace_m", 68);
-    materialNamesAndIds.put("mat_mace_h", 69);
-    materialNamesAndIds.put("mat_dagger_s", 70);
-    materialNamesAndIds.put("mat_dagger_m", 71);
-    materialNamesAndIds.put("mat_dagger_h", 72);
-    materialNamesAndIds.put("mat_orb_s", 73);
-    materialNamesAndIds.put("mat_orb_m", 74);
-    materialNamesAndIds.put("mat_orb_h", 75);
-    materialNamesAndIds.put("mat_book_s", 76);
-    materialNamesAndIds.put("mat_book_m", 77);
-    materialNamesAndIds.put("mat_book_h", 78);
-    materialNamesAndIds.put("mat_2hsword_s", 79);
-    materialNamesAndIds.put("mat_2hsword_m", 80);
-    materialNamesAndIds.put("mat_2hsword_h", 81);
-    materialNamesAndIds.put("mat_polearm_s", 82);
-    materialNamesAndIds.put("mat_polearm_m", 83);
-    materialNamesAndIds.put("mat_polearm_h", 84);
-    materialNamesAndIds.put("mat_staff_s", 85);
-    materialNamesAndIds.put("mat_staff_m", 86);
-    materialNamesAndIds.put("mat_staff_h", 87);
-    materialNamesAndIds.put("mat_bow_s", 88);
-    materialNamesAndIds.put("mat_bow_m", 89);
-    materialNamesAndIds.put("mat_bow_h", 90);
-    materialNamesAndIds.put("mat_hp_regen", 91);
-    materialNamesAndIds.put("mat_poison_recovery_a", 92);
-    materialNamesAndIds.put("mat_poison_recovery_b", 93);
-    materialNamesAndIds.put("mat_gold", 94);
-    materialNamesAndIds.put("mat_deep_sand", 95);
-    materialNamesAndIds.put("mat_swamp", 96);
-    materialNamesAndIds.put("mat_strong_lava", 97);
-    materialNamesAndIds.put("foot_2leg_shulack", 98);
-    materialNamesAndIds.put("mat_Test_Material1", 99);
-    materialNamesAndIds.put("mat_Test_Material2", 100);
-    materialNamesAndIds.put("mat_Test_Material3", 101);
-    materialNamesAndIds.put("mat_poison", 102);
-    materialNamesAndIds.put("mat_Medium_lava", 103);
-    materialNamesAndIds.put("mat_housing_type1", 104);
-    materialNamesAndIds.put("mat_housing_type2", 105);
-    materialNamesAndIds.put("mat_housing_type3", 106);
-    materialNamesAndIds.put("mat_drana", 107);
-    materialNamesAndIds.put("mat_acidheal", 108);
-    materialNamesAndIds.put("foot_2leg_Pet", 109);
-    materialNamesAndIds.put("foot_4leg_Pet", 110);
-    materialNamesAndIds.put("mat_Swamp_Arena", 111);
-    materialNamesAndIds.put("mat_mud_Arena", 112);
-    materialNamesAndIds.put("mat_water_damage_arena", 113);
-    materialNamesAndIds.put("mat_housing_spa", 114);
-    materialNamesAndIds.put("mat_dispel_corn", 115);
-    materialNamesAndIds.put("mat_dispel_starturtle", 116);
-    materialNamesAndIds.put("mat_dispel_starfish", 117);
-    materialNamesAndIds.put("mat_must_die", 118);
-    materialNamesAndIds.put("mat_rainwater_Arena", 119);
-    materialNamesAndIds.put("mat_oditonite_Arena", 120);
-    materialNamesAndIds.put("mat_default_obstacle_1", 121);
-    materialNamesAndIds.put("mat_default_obstacle_2", 122);
-    materialNamesAndIds.put("mat_default_obstacle_3", 123);
-    materialNamesAndIds.put("mat_default_obstacle_4", 124);
-    materialNamesAndIds.put("mat_id_01", 125);
-    materialNamesAndIds.put("mat_id_02", 126);
-    materialNamesAndIds.put("mat_id_03", 127);
-    materialNamesAndIds.put("foot_drakan_F_heel", 128);
-    materialNamesAndIds.put("foot_drakan_M_boots", 129);
-    materialNamesAndIds.put("foot_drakan_bare", 130);
-    materialNamesAndIds.put("foot_robot", 131);
-    materialNamesAndIds.put("mat_rainwater_6vs6Boss", 132);
-    materialNamesAndIds.put("foot_npc", 133);
-    materialNamesAndIds.put("mat_Medium_lava_LDF5", 134);
-    materialNamesAndIds.put("mat_ab1_buildup_op_light", 135);
-    materialNamesAndIds.put("mat_ab1_buildup_op_dark", 136);
-    materialNamesAndIds.put("mat_poison_dmg1", 139);
-    materialNamesAndIds.put("mat_poison_die", 140);
-    materialNamesAndIds.put("mat_eresukigal_dmg", 141);
-    materialNamesAndIds.put("mat_FFA_Hide", 142);
+  public static int loadMaterials(Path clientPath) throws IOException {
+    try (PakFile pakFile = PakFile.open(clientPath.resolve("Data/Material/Material.pak"))) {
+      Element rootElement = BinaryXmlParser.parse(pakFile.unpak("materials.xml")).getRootElement();
+      for (Element material : rootElement.getChildren("material")) {
+        String materialName = material.getChildText("material_name");
+        int materialId = Integer.parseInt(material.getChildText("id"));
+        if (materialNamesAndIds.putIfAbsent(materialName, materialId) != null)
+          throw new IllegalArgumentException(materialName + " is already registered");
+        String materialSkillName = material.getChildText("skill_name");
+        if (materialSkillName != null || materialName.equalsIgnoreCase("mat_abyss_castle_shield"))
+          useSkillMaterialIds.add(materialId);
+      }
+    }
+    if (useSkillMaterialIds.isEmpty()) {
+      throw new IllegalStateException("Found no skill materials (materials.xml structure changed?)");
+    }
+    return materialNamesAndIds.size();
+  }
 
-    materialIntentionIds.add(11);
-    materialIntentionIds.add(12);
-    materialIntentionIds.add(13);
-    materialIntentionIds.add(14);
-    materialIntentionIds.add(15);
-    materialIntentionIds.add(16);
-    materialIntentionIds.add(60);
-    materialIntentionIds.add(61);
-    materialIntentionIds.add(62);
-    materialIntentionIds.add(63);
-    materialIntentionIds.add(91);
-    materialIntentionIds.add(92);
-    materialIntentionIds.add(93);
-    materialIntentionIds.add(97);
-    materialIntentionIds.add(99);
-    materialIntentionIds.add(100);
-    materialIntentionIds.add(101);
-    materialIntentionIds.add(103);
-    materialIntentionIds.add(107);
-    materialIntentionIds.add(108);
-    materialIntentionIds.add(111);
-    materialIntentionIds.add(113);
-    materialIntentionIds.add(114);
-    materialIntentionIds.add(115);
-    materialIntentionIds.add(116);
-    materialIntentionIds.add(117);
-    materialIntentionIds.add(118);
-    // skip skill obstacles
-    //materialIntentionIds.add(121);
-    //materialIntentionIds.add(122);
-    //materialIntentionIds.add(123);
-    //materialIntentionIds.add(124);
-    materialIntentionIds.add(125);
-    materialIntentionIds.add(126);
-    materialIntentionIds.add(127);
-    materialIntentionIds.add(132);
-    materialIntentionIds.add(134);
-
-    //new 7.0
-    materialIntentionIds.add(135);
-    materialIntentionIds.add(136);
-    materialIntentionIds.add(139);
-    materialIntentionIds.add(140);
-    materialIntentionIds.add(141);
-    materialIntentionIds.add(142);
+  public static int getMaterialId(String matName) {
+    return materialNamesAndIds.getOrDefault(matName, -1);
   }
 
   public void load(ByteBuffer bb) throws IOException {
@@ -383,7 +223,8 @@ public class CgfLoader {
       meshFace.v2 = bb.getInt();
 
       int matIdx = bb.getInt();
-      if (isMaterialCollideable(materialDataByChunkId.get(materialIdx.get(matIdx))) || isMaterialIntention(materialDataByChunkId.get(materialIdx.get(matIdx)).materialId)) {
+      CgfMaterialData material = materialDataByChunkId.get(materialIdx.get(matIdx));
+      if (isMaterialCollideable(material) || isUseSkillMaterial(material.materialId)) {
         result.indices.add(meshFace);
       }
       bb.position(bb.position() + 4); //skip smoothing group
@@ -454,7 +295,7 @@ public class CgfLoader {
     if (splitIndex != -1) {
       matName = name.substring(splitIndex + 1);
     }
-    result.materialId = getMaterialIdFor(matName);
+    result.materialId = getMaterialId(matName);
     float collision = bb.getFloat();
     if (collision != 0f && collision != 1f) {
       throw new IOException("expected 0.0 or 1.0 for collision flag but found: " + collision);
@@ -472,10 +313,6 @@ public class CgfLoader {
       }
     }
     return result;
-  }
-
-  public static int getMaterialIdFor(String matName) {
-    return materialNamesAndIds.getOrDefault(matName, -1);
   }
 
   private CgfNodeData loadNodeData(CgfChunkHeader header, ByteBuffer bb) throws IOException {
@@ -563,8 +400,8 @@ public class CgfLoader {
 
       int matIdx = bb.getInt();
       CgfMaterialData material = materialDataByChunkId.get(materialIdx.get(matIdx));
-      if (isMaterialCollideable(material) || isMaterialIntention(material.materialId)) {
-        if (isMaterialIntention(material.materialId) || material.materialId >= 6 && material.materialId <= 9) {
+      if (isMaterialCollideable(material) || isUseSkillMaterial(material.materialId)) {
+        if (isUseSkillMaterial(material.materialId) || material.materialId >= 6 && material.materialId <= 9) {
           result.indices.computeIfAbsent(matIdx, k -> new ArrayList<>()).add(meshFace);
         } else {
           result.indices.computeIfAbsent(0, k -> new ArrayList<>()).add(meshFace);
@@ -665,7 +502,7 @@ public class CgfLoader {
           meshData.faces = face.getValue();
 
           CgfMaterialData matData = materialDataByChunkId.get(materialIdx.get(face.getKey()));
-          if (isMaterialIntention(matData.materialId)) {
+          if (isUseSkillMaterial(matData.materialId)) {
             if (!isMaterialCollideable(matData) || matData.materialId >= 14 && matData.materialId <= 16) { // exception for abyss core & abyss bases
               meshData.collisionIntention = 0;
             }
@@ -690,7 +527,7 @@ public class CgfLoader {
   }
 
   public int getCollidableMaterialId(CgfMaterialData material) {
-    if (isMaterialIntention(material.materialId)) {
+    if (isUseSkillMaterial(material.materialId)) {
       return material.materialId;
     }
     if (material.multiMaterialChunkIds != null) {
@@ -710,7 +547,7 @@ public class CgfLoader {
         } else if (matData.matType != 1) {
           throw new RuntimeException("Unhandled matType: " + matData.matType);
         }
-        if (isMaterialIntention(matData.materialId)) {
+        if (isUseSkillMaterial(matData.materialId)) {
           return matData.materialId;
         }
       }
@@ -718,8 +555,8 @@ public class CgfLoader {
     return 0;
   }
 
-  public static boolean isMaterialIntention(int matId) {
-    return materialIntentionIds.contains(matId);
+  public static boolean isUseSkillMaterial(int matId) {
+    return useSkillMaterialIds.contains(matId);
   }
 
   public boolean isCollideable(CgfNodeData node) {

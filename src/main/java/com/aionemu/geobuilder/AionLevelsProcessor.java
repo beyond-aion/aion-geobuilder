@@ -8,9 +8,11 @@ import com.aionemu.geobuilder.loaders.ObjectsLstLoader;
 import com.aionemu.geobuilder.meshData.CollisionIntention;
 import com.aionemu.geobuilder.meshData.MeshData;
 import com.aionemu.geobuilder.meshData.MeshFace;
+import com.aionemu.geobuilder.meshData.ObjectMeshData;
 import com.aionemu.geobuilder.pakaccessor.PakFile;
 import com.aionemu.geobuilder.utils.BinaryXmlParser;
 import com.aionemu.geobuilder.utils.Matrix4f;
+import com.aionemu.geobuilder.utils.PathSanitizer;
 import com.aionemu.geobuilder.utils.Vector3;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.converters.PathConverter;
@@ -21,8 +23,10 @@ import org.jdom2.input.SAXBuilder;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.ShortBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.util.*;
@@ -46,7 +50,13 @@ public class AionLevelsProcessor {
   @Parameter(names = "-o", description = "Path to the output folder", order = 3)
   protected Path outPath = Path.of("./out");
 
-  @Parameter(names = "-dc", description = "Disable mesh compacting (removal of unused or duplicate vertices and degenerate or duplicate faces)", order = 4)
+  @Parameter(names = "-am", description = "Generate all terrain materials (default: only skill-using materials)", order = 4)
+  protected boolean allTerrainMaterials;
+
+  @Parameter(names = "-do", description = "Disable oxipng optimizer (used for improved terrain PNG compression)", order = 5)
+  protected boolean disableOxipng;
+
+  @Parameter(names = "-dc", description = "Disable mesh compacting (removal of unused or duplicate vertices and degenerate or duplicate faces)", order = 6)
   protected boolean disableMeshCompacting;
 
   @Parameter(names = "-ds", description = "Disable mesh sorting to keep original order of vertices, faces and the face winding order", order = 7)
@@ -56,10 +66,12 @@ public class AionLevelsProcessor {
   protected boolean verbose;
 
   private static final Logger log = Logger.getLogger("GeoBuilder");
+  private static final Logger oxipngLogger = Logger.getLogger("oxipng");
 
   static {
     System.setProperty("java.util.logging.SimpleFormatter.format", "%1$tT [%4$s] %5$s%6$s");
     log.setUseParentHandlers(false);
+    oxipngLogger.setUseParentHandlers(false);
     StreamHandler consoleHandler = new StreamHandler(System.out, new SimpleFormatter() {
       @Override
       public String format(LogRecord record) {
@@ -84,9 +96,8 @@ public class AionLevelsProcessor {
     };
     consoleHandler.setLevel(Level.ALL);
     log.addHandler(consoleHandler);
+    oxipngLogger.addHandler(consoleHandler);
   }
-
-  private static final int H32_POINT_SIZE = 3;
 
   private final Set<String> requiredCgfs = ConcurrentHashMap.newKeySet();
   private final Set<String> requiredDoorCgas = ConcurrentHashMap.newKeySet();
@@ -96,36 +107,36 @@ public class AionLevelsProcessor {
 
   protected void process() {
     log.setLevel(verbose ? Level.ALL : Level.INFO);
+    oxipngLogger.setLevel(verbose ? Level.ALL : Level.WARNING);
     long time = System.currentTimeMillis();
     try {
-      log.info("Loading available levels …");
+      log.info("Loading available levels\r");
       List<LevelData> levels = findLevelsToProcess();
       if (!levels.isEmpty()) {
         if (Files.isDirectory(outPath))
-          Files.list(outPath).filter(p -> p.toString().endsWith(".geo") || p.toString().endsWith(".mesh")).forEach(p -> p.toFile().delete());
+          Files.list(outPath).filter(p -> p.toString().endsWith(".geo") || p.toString().endsWith(".mesh") || p.toString().endsWith(".png")).forEach(p -> p.toFile().delete());
         else
           Files.createDirectories(outPath);
 
-        log.info("Loading available house addresses …");
+        int materialsCount = CgfLoader.loadMaterials(clientPath);
+        log.info("Found " + materialsCount + " materials");
         Map<String, Short> houseAdresses = loadHouseAddresses();
-
-        log.info("Processing levels …");
         processLevels(levels, houseAdresses);
-
-        log.info("Collecting mesh file paths …");
+        Thread terrainTask = Thread.startVirtualThread(() -> createTerrains(outPath, levels));
         List<Path> meshPaks = collectMeshFilePaths();
-
-        log.info("Generating mesh file …");
         createMeshes(outPath, meshPaks, levels);
-
-        log.info("Generating geo files …");
         createGeoFiles(outPath, levels);
+        if (terrainTask.isAlive()) {
+          log.info("Waiting for terrain generation to finish\r");
+          oxipngLogger.setLevel(verbose ? Level.ALL : Level.INFO);
+          terrainTask.join();
+        }
+        log.info("Output folder: " + outPath.toRealPath());
+        log.info("Processing time: " + (System.currentTimeMillis() - time) / 1000 + " s");
       }
     } catch (Throwable t) {
       log.log(Level.SEVERE, "", t);
     }
-    time = (System.currentTimeMillis() - time) / 1000;
-    log.info("Processing time: " + (time / 60) + "m " + (time % 60) + "s");
   }
 
   private List<LevelData> findLevelsToProcess() throws JDOMException, IOException {
@@ -144,7 +155,7 @@ public class AionLevelsProcessor {
     Element rootNode = document.getRootElement();
     boolean clientXml = rootNode.getName().equalsIgnoreCase("world_id");
     List<Element> worldIdXmlLevels = clientXml ? rootNode.getChildren("data") : rootNode.getChildren("map");
-    log.fine("Validating " + worldIdXmlLevels.size() + " levels referenced in " + worldIdXml + " …");
+    log.fine("Validating " + worldIdXmlLevels.size() + " levels referenced in " + worldIdXml);
 
     List<LevelData> levels = new ArrayList<>();
     // buggy client files are normal, only log warning when we generate from server file or -lvl parameter
@@ -206,111 +217,94 @@ public class AionLevelsProcessor {
 
   private void processLevels(List<LevelData> levels, Map<String, Short> houseAddresses) {
     levels.parallelStream().forEach(level -> {
-      if (parseLevelPak(level, houseAddresses))
-        level.streamAllMeshFileNames().filter(m -> !isIgnored(m, level)).forEach(requiredCgfs::add);
-      log.info(level + ": Done\r");
+      parseLevelPak(level, houseAddresses);
+      level.streamAllMeshFileNames().filter(m -> !isIgnored(m, level)).forEach(requiredCgfs::add);
     });
     log.info("Found " + requiredCgfs.size() + " mesh references in " + levels.size() + " level" + (levels.size() == 1 ? "" : "s"));
   }
 
-  private boolean parseLevelPak(LevelData level, Map<String, Short> houseAddresses) {
+  private void parseLevelPak(LevelData level, Map<String, Short> houseAddresses) {
     log.info(level + ": Processing " + level.clientLevelPakFile.getFileName() + '\r');
-    ByteBuffer brushLst, objectsLst, mission, landMapH32;
-    Document levelData = null;
     String levelName = level.levelName.toLowerCase();
     boolean needsBrushLst = !(level.isTestLevel() || levelName.contains("system_basic") || levelName.endsWith("prison"));
     try (PakFile pakFile = PakFile.open(level.clientLevelPakFile)) {
-      ByteBuffer levelDataXml = pakFile.unpak("leveldata.xml");
-      if (levelDataXml == null)
-        log.warning(level + ": " + level.clientLevelPakFile + " does not contain leveldata.xml");
+      processPakFile(pakFile, "leveldata.xml", level, buffer -> parseLevelData(buffer, level)); // loads missionPath and useTerrain
+      if (level.useTerrain)
+        processPakFile(pakFile, "terrain/land_map.h32", level, buffer -> level.terrain.load(buffer, allTerrainMaterials));
       else
-        levelData = new SAXBuilder().build(new ByteArrayInputStream(levelDataXml.array()));
-      brushLst = pakFile.unpak("brush.lst");
-      if (brushLst == null)
+        log.fine(level + ": skipped loading terrain (disabled in leveldata.xml)");
+      if (level.missionPath != null) {
+        processPakFile(pakFile, level.missionPath, level, buffer -> level.entityEntries = EntityLoader.loadPlaceables(buffer, houseAddresses));
+        // secondary door state will be generated from doors in primary state
+        level.entityEntries.stream().filter(e -> e.type == EntryType.DOOR).map(e -> e.mesh).forEach(requiredDoorCgas::add);
+      }
+      if (pakFile.contains("brush.lst"))
+        processPakFile(pakFile, "brush.lst", level, buffer -> level.brushMeshData = BrushLstLoader.load(buffer));
+      else
         log.log(needsBrushLst ? Level.WARNING : Level.FINE, level + ": " + level.clientLevelPakFile + " does not contain brush.lst");
-      objectsLst = pakFile.unpak("objects.lst");
-      if (objectsLst == null)
+      if (pakFile.contains("objects.lst"))
+        processPakFile(pakFile, "objects.lst", level, buffer -> ObjectsLstLoader.load(buffer, level));
+      else
         log.fine(level + ": " + level.clientLevelPakFile + " does not contain objects.lst");
-      mission = pakFile.unpak("mission_mission0.xml");
-      if (mission == null)
-        log.warning(level + ": " + level.clientLevelPakFile + " does not contain mission_mission0.xml");
-      landMapH32 = pakFile.unpak("terrain/land_map.h32");
-      if (landMapH32 == null)
-        log.warning(level + ": " + level.clientLevelPakFile + " does not contain land_map.h32");
+      log.info(level + ": Processing " + level.clientLevelPakFile.getFileName() + " finished\r");
+    } catch (NoSuchFileException e) {
+      log.warning("Cannot process " + level.clientLevelPakFile + ": " + e.getFile() + " is missing");
     } catch (Exception e) {
-      log.log(Level.SEVERE, "Cannot process " + level.clientLevelPakFile, e);
-      return false;
+      log.log(Level.SEVERE, "Error processing " + level.clientLevelPakFile, e);
     }
-    if (landMapH32 != null) {
-      level.landMapH32 = landMapH32;
-      level.terrainMaterials = parseTerrainMaterials(levelData, level);
-    }
-    if (brushLst != null)
-      parseBrushLst(brushLst, level);
-    if (objectsLst != null)
-      parseObjects(objectsLst, levelData, level);
-    if (mission != null)
-      parseEntities(mission, houseAddresses, level);
-
-    log.fine(level + ": [Level.pak] Done");
-    return true;
   }
 
-  private byte[] parseTerrainMaterials(Document levelData, LevelData level) {
-    log.fine(level + ": [leveldata.xml] Processing …\r");
-    byte[] materialIds = null;
-    try {
-      Element rootNode = levelData.getRootElement();
-      List<Element> objects = rootNode.getChildren("SurfaceTypes").get(0).getChildren();
-      materialIds = new byte[objects.size()];
-      for (int i = 0; i < objects.size(); i++) {
-        String material = objects.get(i).getAttributeValue("Material").trim();
-        int matId = CgfLoader.getMaterialIdFor(material);
+  private void parseLevelData(ByteBuffer leveldataXml, LevelData level) throws Exception {
+    Element rootNode = new SAXBuilder().build(new ByteArrayInputStream(leveldataXml.array())).getRootElement();
+    Element levelInfo = rootNode.getChild("LevelInfo");
+    int heightmapXSize = levelInfo.getAttribute("HeightmapXSize").getIntValue();
+    int heightmapYSize = levelInfo.getAttribute("HeightmapYSize").getIntValue();
+    int heightmapUnitSize = levelInfo.getAttribute("HeightmapUnitSize").getIntValue();
+    List<Element> objects = rootNode.getChild("SurfaceTypes").getChildren();
+    level.terrain = new Terrain(heightmapXSize, heightmapYSize, heightmapUnitSize);
+    level.terrain.materialIds = new byte[objects.size()];
+    for (int i = 0; i < objects.size(); i++) {
+      String material = objects.get(i).getAttributeValue("Material").trim();
+      if (!material.isEmpty()) {
+        int matId = CgfLoader.getMaterialId(material);
+        if (matId == -1) {
+          if (level.isTestLevel())
+            log.fine(level + ": Missing material: " + material);
+          else
+            throw new IllegalArgumentException("Missing material: " + material);
+        }
         if (matId > 0xFF)
           throw new IllegalArgumentException("Encountered out of range material ID " + matId + " for " + material);
-        materialIds[i] = CgfLoader.isMaterialIntention(matId) ? (byte) matId : 0;
+        level.terrain.materialIds[i] = (byte) matId;
       }
-    } catch (Exception e) {
-      log.log(Level.SEVERE, level + ": Error reading leveldata.xml", e);
     }
-    log.fine(level + ": [leveldata.xml] Done");
-    return materialIds == null || materialIds.length == 0 ? null : materialIds;
+
+    List<Element> vegetation = rootNode.getChild("Vegetation").getChildren();
+    if (!vegetation.isEmpty()) {
+      level.objectMeshData = new ObjectMeshData();
+      level.objectMeshData.meshFiles = new ArrayList<>(vegetation.size());
+      for (Element element : vegetation) {
+        level.objectMeshData.meshFiles.add(PathSanitizer.sanitize(element.getAttributeValue("FileName")));
+      }
+    }
+
+    Element mission = rootNode.getChild("Missions").getChild("Mission");
+    level.missionPath = Objects.requireNonNull(mission.getAttributeValue("File"));
+    level.useTerrain = mission.getChild("LevelOption").getChild("Initialize").getAttribute("Render_Terrain").getIntValue() != 0;
   }
 
-  private void parseBrushLst(ByteBuffer brushLst, LevelData level) {
-    log.fine(level + ": [brush.lst] Processing …\r");
+  private void processPakFile(PakFile pakFile, String fileName, LevelData level, ThrowingConsumer<ByteBuffer> consumer) {
+    log.fine(level + ": Processing " + fileName + '\r');
     try {
-      level.brushMeshData = BrushLstLoader.load(brushLst);
+      consumer.consume(pakFile.unpak(fileName));
+      log.fine(level + ": Processing " + fileName + " finished\r");
     } catch (Exception e) {
-      log.log(Level.SEVERE, level + ": Error parsing brush.lst", e);
+      log.log(Level.SEVERE, level + ": Error processing " + fileName, e);
     }
-    log.fine(level + ": [brush.lst] Done");
   }
-
-  private void parseObjects(ByteBuffer objects, Document levelData, LevelData level) {
-    log.fine(level + ": [objects.lst] Processing …\r");
-    try {
-      level.objectMeshData = ObjectsLstLoader.loadLevelData(levelData, objects);
-    } catch (Exception e) {
-      log.log(Level.SEVERE, level + ": Error parsing objects.lst", e);
-    }
-    log.fine(level + ": [objects.lst] Done");
-  }
-
-  private void parseEntities(ByteBuffer mission, Map<String, Short> houseAddresses, LevelData level) {
-    log.fine(level + ": [mission_mission0.xml] Processing entities …\r");
-    try {
-      level.entityEntries = EntityLoader.loadPlaceables(mission, houseAddresses);
-      // secondary door state will be generated from doors in primary state
-      level.entityEntries.stream().filter(e -> e.type == EntryType.DOOR).map(e -> e.mesh).forEach(requiredDoorCgas::add);
-    } catch (Exception e) {
-      log.log(Level.SEVERE, level + ": Error parsing mission_mission0.xml", e);
-    }
-    log.fine(level + ": [mission_mission0.xml] Done");
-  }
-
 
   private List<Path> collectMeshFilePaths() throws IOException {
+    log.info("Collecting mesh file paths\r");
     List<Path> clientMeshFiles = findMeshPaks("Levels/common", "Levels/idabpro", "Objects");
 
     if (clientMeshFiles.isEmpty())
@@ -335,9 +329,10 @@ public class AionLevelsProcessor {
 
   private void createMeshes(Path outputFolder, List<Path> meshPaks, List<LevelData> levels) throws IOException {
     if (requiredCgfs.isEmpty()) {
-      log.info("No referenced meshes, skipping");
+      log.info("No referenced meshes, skipping generating mesh file");
       return;
     }
+    log.info("Generating mesh file\r");
     AtomicInteger totalMeshes = new AtomicInteger(requiredCgfs.size());
     Map<String, List<MeshData>> availableMeshes = new ConcurrentHashMap<>();
     meshPaks.parallelStream().forEach(meshPakFile -> {
@@ -379,17 +374,18 @@ public class AionLevelsProcessor {
         .sorted(Map.Entry.comparingByKey()) // sort to generate .mesh files with deterministic, comparable hashes
         .collect(Collectors.groupingBy(Map.Entry::getValue, LinkedHashMap::new, Collectors.mapping(Map.Entry::getKey, Collectors.joining("|"))));
     int duplicateCount = availableMeshes.size() - uniqueMeshes.size();
-    log.info("Writing " + uniqueMeshes.size() + " unique meshes (" + duplicateCount + " duplicates have been merged) …");
+    String meshes = uniqueMeshes.size() + " unique meshes (" + duplicateCount + " duplicates have been merged)";
+    log.info("Writing " + meshes + '\r');
 
     Path meshFile = outputFolder.resolve("models.mesh");
     try (DataOutputStream stream = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(meshFile)))) {
       uniqueMeshes.forEach((data, paths) -> writeMeshes(paths, data, stream));
     }
-    log.info("Created " + meshFile.toRealPath());
+    log.info("Created " + meshFile.getFileName() + " with " + meshes);
   }
 
   private void compact(Collection<List<MeshData>> meshes) {
-    log.info("Compacting meshes …");
+    log.info("Compacting meshes\r");
     AtomicInteger oldSize = new AtomicInteger(), newSize = new AtomicInteger();
     meshes.parallelStream().forEach(m -> m.parallelStream().forEach(meshData -> {
       oldSize.addAndGet(meshData.getSize());
@@ -399,52 +395,64 @@ public class AionLevelsProcessor {
     log.info("Compacted meshes to " + Math.round(10000f * newSize.get() / oldSize.get()) / 100f + " % of their original size (before: " + (oldSize.get() / 1024 / 1024) + " MiB, after: " + (newSize.get() / 1024 / 1024) + " MiB)");
   }
 
-  private void createGeoFiles(Path outputFolder, List<LevelData> levels) throws IOException {
+  private void createTerrains(Path outputFolder, List<LevelData> levels) {
+    log.info("Generating terrain files" + (disableOxipng ? '\r' : " using oxipng optimization"));
+    Set<String> skipped = ConcurrentHashMap.newKeySet();
+    Map<ShortBuffer, Terrain.Heightmap> heightmaps = new ConcurrentHashMap<>();
+    Map<ByteBuffer, Terrain.Heightmap> materials = new ConcurrentHashMap<>();
+    levels.parallelStream().forEach(level -> {
+      if (!level.useTerrain) {
+        skipped.add(level.levelId);
+        return;
+      }
+      heightmaps.compute(level.terrain.heightmap, (k, heightmap) -> {
+        if (heightmap == null)
+          heightmap = level.terrain.createHeightmap();
+        heightmap.fileNames.add(level.levelId);
+        return heightmap;
+      });
+      if (level.terrain.materials != null) {
+        materials.compute(level.terrain.materials, (k, matmap) -> {
+          if (matmap == null)
+            matmap = level.terrain.createMaterialmap();
+          matmap.fileNames.add(level.levelId);
+          return matmap;
+        });
+      }
+    });
+    Stream.concat(heightmaps.values().stream(), materials.values().stream())
+        .parallel()
+        .forEach(heightmap -> heightmap.write(outputFolder, disableOxipng, oxipngLogger));
+    log.info("Created " + heightmaps.size() + " unique heightmaps and " + materials.size() + " unique material maps" + (skipped.isEmpty() ? "" : " (skipped " + skipped.size() + " levels with disabled terrain: " + skipped.stream().sorted().collect(Collectors.joining(", ")) + ")"));
+  }
+
+  private void createGeoFiles(Path outputFolder, List<LevelData> levels) {
+    log.info("Generating geo files\r");
+    Set<String> skipped = ConcurrentHashMap.newKeySet();
     AtomicInteger i = new AtomicInteger();
     levels.parallelStream().forEach(level -> {
       try {
-        createGeoFile(outputFolder, level);
-        log.info("[" + i.incrementAndGet() + "/" + levels.size() + "] " + level.levelName + ": " + level.levelId + ".geo Done\r");
+        if (createGeoFile(outputFolder, level)) {
+          log.info("[" + i.incrementAndGet() + "/" + (levels.size() - skipped.size()) + "] " + level.levelName + ": " + level.levelId + ".geo Done\r");
+        } else {
+          skipped.add(level.levelId);
+        }
       } catch (Exception e) {
         log.log(Level.SEVERE, "Error generating " + level.levelId + ".geo", e);
       }
     });
-    log.info("Created " + i + " geo file" + (i.get() == 1 ? "" : "s") + " under " + outputFolder.toRealPath());
-    int notGenerated = levels.size() - i.get();
+    log.info("Created " + i.get() + " geo file" + (i.get() == 1 ? "" : "s") + (skipped.isEmpty() ? "" : " (skipped " + skipped.size() + " levels without entities: " + skipped.stream().sorted().collect(Collectors.joining(", ")) + ")"));
+    int notGenerated = levels.size() - i.get() - skipped.size();
     if (notGenerated != 0)
-      log.warning(notGenerated + " file" + (notGenerated == 1 ? "" : "s") + " could be generated.");
+      log.warning(notGenerated + " file" + (notGenerated == 1 ? "" : "s") + " could not be generated.");
   }
 
-  private void createGeoFile(Path outputFolder, LevelData level) throws IOException {
+  private boolean createGeoFile(Path outputFolder, LevelData level) throws IOException {
+    if (level.streamAllMeshFileNames().findAny().isEmpty()) {
+      return false;
+    }
     Path geoFile = outputFolder.resolve(level.levelId + ".geo");
     try (DataOutputStream stream = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(geoFile)))) {
-      short z = 0;
-      boolean isAllSameZ = true;
-      // terrain
-      if (level.landMapH32 != null) {
-        ByteBuffer terrainData = ByteBuffer.allocate(level.landMapH32.capacity());
-        for (int i = 0; i < level.landMapH32.capacity(); i += H32_POINT_SIZE) {
-          if (z != (z = level.landMapH32.getShort()) && i > 0)
-            isAllSameZ = false;
-          int materialIndex = level.landMapH32.get() & 0xFF;
-          boolean isTerrainCutout = materialIndex == 0x3F;
-          terrainData.putShort(isTerrainCutout ? Short.MIN_VALUE : z);
-          terrainData.put(isTerrainCutout || level.terrainMaterials == null ? 0 : level.terrainMaterials[materialIndex]);
-        }
-        if (level.landMapH32.remaining() > 0) {
-          throw new IOException("Terraindata for " + geoFile + " was not fully read.");
-        }
-        if (!isAllSameZ) {
-          stream.writeByte(1); // terrain mesh
-          stream.writeInt(terrainData.capacity() / H32_POINT_SIZE); // terrain data count
-          stream.write(terrainData.array());
-        }
-      }
-      if (isAllSameZ) {
-        stream.writeByte(0); // basic terrain (same height everywhere) or no real terrain below map (z = 0, mesh based instances)
-        stream.writeShort(z);
-      }
-
       // brushes
       if (level.brushMeshData != null) {
         for (BrushEntry entry : level.brushMeshData.brushEntries) {
@@ -519,6 +527,7 @@ public class AionLevelsProcessor {
         }
       }
     }
+    return true;
   }
 
   private boolean shouldSkip(String meshFileName, LevelData level) {
@@ -700,5 +709,10 @@ public class AionLevelsProcessor {
       case "levels/common/light/structures/props/exterior/pr_l_caldron.cgf" -> Set.of("300280000", "300620000").contains(level.levelId);
       default -> false;
     };
+  }
+
+  @FunctionalInterface
+  interface ThrowingConsumer<T> {
+    void consume(T buffer) throws Exception;
   }
 }

@@ -11,6 +11,7 @@ import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.zip.CRC32;
@@ -70,7 +71,7 @@ public class PakFile implements AutoCloseable {
           }
 
           String fileName = new String(pakFileHeader.fileNameBytes);
-          fileHeaders.put(pathPrefix + PathSanitizer.sanitize(fileName), pakFileHeader);
+          fileHeaders.put(PathSanitizer.sanitize(pathPrefix + PathSanitizer.sanitize(fileName)), pakFileHeader);
           pakBlocks.add(pakFileHeader);
           break;
         case PAK_SIGNATURE2_DIR:
@@ -110,8 +111,10 @@ public class PakFile implements AutoCloseable {
   }
 
   public ByteBuffer unpak(String fileName) throws IOException {
-    PakFileHeader pakFileHeader = fileHeaders.get(fileName);
-    return pakFileHeader == null ? null : unpak(pakFileHeader);
+    PakFileHeader pakFileHeader = fileHeaders.get(PathSanitizer.sanitize(fileName));
+    if (pakFileHeader == null)
+      throw new NoSuchFileException(fileName);
+    return unpak(pakFileHeader);
   }
 
   private ByteBuffer unpak(PakFileHeader pakFileHeader) throws IOException {
@@ -161,6 +164,10 @@ public class PakFile implements AutoCloseable {
 
   public Set<String> getFileNames() {
     return fileHeaders.keySet();
+  }
+
+  public boolean contains(String fileName) {
+    return fileHeaders.containsKey(PathSanitizer.sanitize(fileName));
   }
 
   public int getUnpakedFileSize(String fileName) {

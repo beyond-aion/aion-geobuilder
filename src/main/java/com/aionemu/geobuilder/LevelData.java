@@ -4,7 +4,6 @@ import com.aionemu.geobuilder.entries.EntityEntry;
 import com.aionemu.geobuilder.meshData.BrushLstMeshData;
 import com.aionemu.geobuilder.meshData.ObjectMeshData;
 
-import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
@@ -15,8 +14,9 @@ public class LevelData {
   public final String levelId;
   public final String levelName;
   public final Path clientLevelPakFile;
-  public volatile ByteBuffer landMapH32;
-  public volatile byte[] terrainMaterials;
+  public String missionPath;
+  public boolean useTerrain;
+  public volatile Terrain terrain;
   public volatile BrushLstMeshData brushMeshData;
   public volatile ObjectMeshData objectMeshData;
   public volatile List<EntityEntry> entityEntries = Collections.emptyList();
