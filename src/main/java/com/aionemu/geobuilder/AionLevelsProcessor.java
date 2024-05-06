@@ -10,10 +10,10 @@ import com.aionemu.geobuilder.meshData.MeshData;
 import com.aionemu.geobuilder.meshData.MeshFace;
 import com.aionemu.geobuilder.meshData.ObjectMeshData;
 import com.aionemu.geobuilder.pakaccessor.PakFile;
-import com.aionemu.geobuilder.utils.BinaryXmlParser;
 import com.aionemu.geobuilder.utils.Matrix4f;
 import com.aionemu.geobuilder.utils.PathSanitizer;
 import com.aionemu.geobuilder.utils.Vector3;
+import com.aionemu.geobuilder.utils.XmlParser;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.converters.PathConverter;
 import org.jdom2.Document;
@@ -21,7 +21,10 @@ import org.jdom2.Element;
 import org.jdom2.JDOMException;
 import org.jdom2.input.SAXBuilder;
 
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
 import java.nio.charset.StandardCharsets;
@@ -120,8 +123,8 @@ public class AionLevelsProcessor {
 
         int materialsCount = CgfLoader.loadMaterials(clientPath);
         log.info("Found " + materialsCount + " materials");
-        Map<String, Short> houseAdresses = loadHouseAddresses();
-        processLevels(levels, houseAdresses);
+        Map<String, Short> houseAddresses = loadHouseAddresses();
+        processLevels(levels, houseAddresses);
         Thread terrainTask = Thread.startVirtualThread(() -> createTerrains(outPath, levels));
         List<Path> meshPaks = collectMeshFilePaths();
         createMeshes(outPath, meshPaks, levels);
@@ -151,7 +154,7 @@ public class AionLevelsProcessor {
     log.fine("Found " + levelsByName.size() + " levels in " + levelsRootFolder);
 
     // read client maps
-    Document document = worldIdPath == null ? BinaryXmlParser.parse(getClientWorldIdFile()) : new SAXBuilder().build(worldIdPath.toFile());
+    Document document = worldIdPath == null ? XmlParser.parse(getClientWorldIdFile()) : new SAXBuilder().build(worldIdPath.toFile());
     Element rootNode = document.getRootElement();
     boolean clientXml = rootNode.getName().equalsIgnoreCase("world_id");
     List<Element> worldIdXmlLevels = clientXml ? rootNode.getChildren("data") : rootNode.getChildren("map");
@@ -190,14 +193,14 @@ public class AionLevelsProcessor {
 
   private Map<String, Short> loadHouseAddresses() throws IOException {
     log.info("Loading available house addresses\r");
-    Document document = BinaryXmlParser.parse(getClientHouseAddressFile());
+    Document document = XmlParser.parse(getClientHouseAddressFile());
     Element rootNode = document.getRootElement();
     Map<String, Short> addressIdsByName = new HashMap<>();
     for (Element address : rootNode.getChildren("client_housing_address")) {
       String name = address.getChildText("name");
       short id = Short.parseShort(address.getChildText("id"));
       if (addressIdsByName.putIfAbsent(name, id) != null)
-        log.warning("Duplicate house name in client_housing_adress.xml: " + name);
+        log.warning("Duplicate house name in client_housing_address.xml: " + name);
     }
     log.info("Found " + addressIdsByName.size() + " house addresses");
     return addressIdsByName;
@@ -255,7 +258,7 @@ public class AionLevelsProcessor {
   }
 
   private void parseLevelData(ByteBuffer leveldataXml, LevelData level) throws Exception {
-    Element rootNode = new SAXBuilder().build(new ByteArrayInputStream(leveldataXml.array())).getRootElement();
+    Element rootNode = XmlParser.parse(leveldataXml).getRootElement();
     Element levelInfo = rootNode.getChild("LevelInfo");
     int heightmapXSize = levelInfo.getAttribute("HeightmapXSize").getIntValue();
     int heightmapYSize = levelInfo.getAttribute("HeightmapYSize").getIntValue();

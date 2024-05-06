@@ -2,21 +2,35 @@ package com.aionemu.geobuilder.utils;
 
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.jdom2.JDOMException;
 import org.jdom2.Parent;
+import org.jdom2.input.SAXBuilder;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-public final class BinaryXmlParser {
+public class XmlParser {
 
-  private BinaryXmlParser() {
+  private XmlParser() {
   }
 
   public static Document parse(ByteBuffer buffer) throws IOException {
-    if (buffer.get() != (byte) 128)
-      throw new IOException("Not a binary XML file");
+    int position = buffer.position();
+    if (buffer.get() == (byte) 128) { // binary xml marker
+      return parseBinaryXml(buffer);
+    }
+    int offset = position + buffer.arrayOffset();
+    int length = buffer.limit() - position;
+    try {
+      return new SAXBuilder().build(new ByteArrayInputStream(buffer.array(), offset, length));
+    } catch (JDOMException e) {
+      throw new IOException(e);
+    }
+  }
 
+  private static Document parseBinaryXml(ByteBuffer buffer) {
     byte[] stringTable = new byte[readPackedInt(buffer)];
     buffer.get(stringTable);
 

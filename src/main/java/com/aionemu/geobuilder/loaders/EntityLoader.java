@@ -1,17 +1,12 @@
 package com.aionemu.geobuilder.loaders;
 
-import com.aionemu.geobuilder.entries.EntryType;
-import com.aionemu.geobuilder.entries.DoorEntry;
-import com.aionemu.geobuilder.entries.EntityEntry;
-import com.aionemu.geobuilder.entries.HouseEntry;
-import com.aionemu.geobuilder.entries.TownEntry;
+import com.aionemu.geobuilder.entries.*;
 import com.aionemu.geobuilder.utils.PathSanitizer;
 import com.aionemu.geobuilder.utils.Vector3;
+import com.aionemu.geobuilder.utils.XmlParser;
 import org.jdom2.Document;
 import org.jdom2.Element;
-import org.jdom2.input.SAXBuilder;
 
-import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +18,7 @@ public class EntityLoader {
   }
 
   public static List<EntityEntry> loadPlaceables(ByteBuffer mission, Map<String, Short> addresses) throws Exception {
-    Document document = new SAXBuilder().build(new ByteArrayInputStream(mission.array()));
+    Document document = XmlParser.parse(mission);
     Element rootNode = document.getRootElement();
     List<Element> entities = rootNode.getChild("Objects").getChildren("Entity");
     List<EntityEntry> entityEntries = new ArrayList<>(entities.size());

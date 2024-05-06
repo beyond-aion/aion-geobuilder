@@ -1,14 +1,14 @@
 package com.aionemu.geobuilder.loaders;
 
-import com.aionemu.geobuilder.meshData.CollisionIntention;
 import com.aionemu.geobuilder.cgfData.*;
+import com.aionemu.geobuilder.meshData.CollisionIntention;
 import com.aionemu.geobuilder.meshData.MeshData;
 import com.aionemu.geobuilder.meshData.MeshFace;
 import com.aionemu.geobuilder.pakaccessor.PakFile;
-import com.aionemu.geobuilder.utils.BinaryXmlParser;
 import com.aionemu.geobuilder.utils.Matrix4f;
 import com.aionemu.geobuilder.utils.Quaternion;
 import com.aionemu.geobuilder.utils.Vector3;
+import com.aionemu.geobuilder.utils.XmlParser;
 import org.jdom2.Element;
 
 import java.io.IOException;
@@ -43,7 +43,7 @@ public class CgfLoader {
 
   public static int loadMaterials(Path clientPath) throws IOException {
     try (PakFile pakFile = PakFile.open(clientPath.resolve("Data/Material/Material.pak"))) {
-      Element rootElement = BinaryXmlParser.parse(pakFile.unpak("materials.xml")).getRootElement();
+      Element rootElement = XmlParser.parse(pakFile.unpak("materials.xml")).getRootElement();
       for (Element material : rootElement.getChildren("material")) {
         String materialName = material.getChildText("material_name");
         int materialId = Integer.parseInt(material.getChildText("id"));
